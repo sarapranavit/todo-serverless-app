@@ -1,6 +1,6032 @@
 /******/ (() => { // webpackBootstrap
 /******/ 	var __webpack_modules__ = ({
 
+/***/ "../../@aws/dynamodb-auto-marshaller/build/BinarySet.js":
+/*!**************************************************************!*\
+  !*** ../../@aws/dynamodb-auto-marshaller/build/BinarySet.js ***!
+  \**************************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var tslib_1 = __webpack_require__(/*! tslib */ "../../tslib/tslib.es6.js");
+var ObjectSet_1 = __webpack_require__(/*! ./ObjectSet */ "../../@aws/dynamodb-auto-marshaller/build/ObjectSet.js");
+/**
+ * A set of binary values represented as either ArrayBuffer objects or
+ * ArrayBufferView objects. Equality is determined by the underlying byte
+ * sequence and not by the identity or view window type of the provided value.
+ */
+var BinarySet = /** @class */ (function (_super) {
+    tslib_1.__extends(BinarySet, _super);
+    function BinarySet() {
+        return _super !== null && _super.apply(this, arguments) || this;
+    }
+    BinarySet.prototype.delete = function (value) {
+        var valueView = getBinaryView(value);
+        var scrubbedValues = this._values.filter(function (item) {
+            return !binaryEquals(getBinaryView(item), valueView);
+        });
+        var numRemoved = this._values.length - scrubbedValues.length;
+        this._values = scrubbedValues;
+        return numRemoved > 0;
+    };
+    /**
+     * @inheritDoc
+     *
+     * Equality is determined by inspecting the bytes of the ArrayBuffer or
+     * ArrayBufferView.
+     *
+     * @example On a little-endian system, the following values would be
+     * considered equal:
+     *
+     *     new Uint32Array([0xdeadbeef]);
+     *     (new Uint32Array([0xdeadbeef])).buffer;
+     *     new Uint16Array([0xbeef, 0xdead]);
+     *     new Uint8Array([0xef, 0xbe, 0xad, 0xde]);
+     */
+    BinarySet.prototype.has = function (value) {
+        var e_1, _a;
+        var valueView = getBinaryView(value);
+        try {
+            for (var _b = tslib_1.__values(this), _c = _b.next(); !_c.done; _c = _b.next()) {
+                var item = _c.value;
+                if (binaryEquals(getBinaryView(item), valueView)) {
+                    return true;
+                }
+            }
+        }
+        catch (e_1_1) { e_1 = { error: e_1_1 }; }
+        finally {
+            try {
+                if (_c && !_c.done && (_a = _b.return)) _a.call(_b);
+            }
+            finally { if (e_1) throw e_1.error; }
+        }
+        return false;
+    };
+    return BinarySet;
+}(ObjectSet_1.ObjectSet));
+exports.BinarySet = BinarySet;
+function binaryEquals(a, b) {
+    if (a.byteLength !== b.byteLength) {
+        return false;
+    }
+    for (var i = 0; i < a.byteLength; i++) {
+        if (a.getUint8(i) !== b.getUint8(i)) {
+            return false;
+        }
+    }
+    return true;
+}
+function getBinaryView(value) {
+    return ArrayBuffer.isView(value)
+        ? new DataView(value.buffer, value.byteOffset, value.byteLength)
+        : new DataView(value);
+}
+
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-auto-marshaller/build/Marshaller.js":
+/*!***************************************************************!*\
+  !*** ../../@aws/dynamodb-auto-marshaller/build/Marshaller.js ***!
+  \***************************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var tslib_1 = __webpack_require__(/*! tslib */ "../../tslib/tslib.es6.js");
+var BinarySet_1 = __webpack_require__(/*! ./BinarySet */ "../../@aws/dynamodb-auto-marshaller/build/BinarySet.js");
+var isArrayBuffer_1 = __webpack_require__(/*! ./isArrayBuffer */ "../../@aws/dynamodb-auto-marshaller/build/isArrayBuffer.js");
+var NumberValue_1 = __webpack_require__(/*! ./NumberValue */ "../../@aws/dynamodb-auto-marshaller/build/NumberValue.js");
+var NumberValueSet_1 = __webpack_require__(/*! ./NumberValueSet */ "../../@aws/dynamodb-auto-marshaller/build/NumberValueSet.js");
+exports.EmptyHandlingStrategies = {
+    omit: 'omit',
+    nullify: 'nullify',
+    leave: 'leave',
+};
+exports.InvalidHandlingStrategies = {
+    /**
+     * Remove any invalid values from the serialized output.
+     */
+    omit: 'omit',
+    /**
+     * Throw an error when an unserializable value is encountered.
+     */
+    throw: 'throw',
+};
+/**
+ * A class that will convert arbitrary JavaScript data types to their most
+ * logical in the DynamoDB schema.
+ */
+var Marshaller = /** @class */ (function () {
+    function Marshaller(_a) {
+        var _b = _a === void 0 ? {} : _a, _c = _b.onEmpty, onEmpty = _c === void 0 ? 'leave' : _c, _d = _b.onInvalid, onInvalid = _d === void 0 ? 'throw' : _d, _e = _b.unwrapNumbers, unwrapNumbers = _e === void 0 ? false : _e;
+        this.onEmpty = onEmpty;
+        this.onInvalid = onInvalid;
+        this.unwrapNumbers = unwrapNumbers;
+    }
+    /**
+     * Convert a JavaScript object with string keys and arbitrary values into an
+     * object with string keys and DynamoDB AttributeValue objects as values.
+     */
+    Marshaller.prototype.marshallItem = function (item) {
+        var value = this.marshallValue(item);
+        if (!(value && value.M) && this.onInvalid === 'throw') {
+            throw new Error("Cannot serialize " + typeof item + " as an attribute map");
+        }
+        return value && value.M ? value.M : {};
+    };
+    /**
+     * Convert a JavaScript value into a DynamoDB AttributeValue or `undefined`.
+     *
+     * @throws Error if the value cannot be converted to a DynamoDB type and the
+     * marshaller has been configured to throw on invalid input.
+     */
+    Marshaller.prototype.marshallValue = function (value) {
+        switch (typeof value) {
+            case 'boolean':
+                return { BOOL: value };
+            case 'number':
+                return { N: value.toString(10) };
+            case 'object':
+                return this.marshallComplexType(value);
+            case 'string':
+                return value ? { S: value } : this.handleEmptyString(value);
+            case 'undefined':
+                return undefined;
+            case 'function':
+            case 'symbol':
+            default:
+                if (this.onInvalid === 'throw') {
+                    throw new Error("Cannot serialize values of the " + typeof value + " type");
+                }
+        }
+    };
+    /**
+     * Convert a DynamoDB operation result (an object with string keys and
+     * AttributeValue values) to an object with string keys and native
+     * JavaScript values.
+     */
+    Marshaller.prototype.unmarshallItem = function (item) {
+        return this.unmarshallValue({ M: item });
+    };
+    /**
+     * Convert a DynamoDB AttributeValue into a native JavaScript value.
+     */
+    Marshaller.prototype.unmarshallValue = function (item) {
+        var _this = this;
+        var e_1, _a, e_2, _b;
+        if (item.S !== undefined) {
+            return item.S;
+        }
+        if (item.N !== undefined) {
+            return this.unwrapNumbers
+                ? Number(item.N)
+                : new NumberValue_1.NumberValue(item.N);
+        }
+        if (item.B !== undefined) {
+            return item.B;
+        }
+        if (item.BOOL !== undefined) {
+            return item.BOOL;
+        }
+        if (item.NULL !== undefined) {
+            return null;
+        }
+        if (item.SS !== undefined) {
+            var set = new Set();
+            try {
+                for (var _c = tslib_1.__values(item.SS), _d = _c.next(); !_d.done; _d = _c.next()) {
+                    var member = _d.value;
+                    set.add(member);
+                }
+            }
+            catch (e_1_1) { e_1 = { error: e_1_1 }; }
+            finally {
+                try {
+                    if (_d && !_d.done && (_a = _c.return)) _a.call(_c);
+                }
+                finally { if (e_1) throw e_1.error; }
+            }
+            return set;
+        }
+        if (item.NS !== undefined) {
+            if (this.unwrapNumbers) {
+                var set = new Set();
+                try {
+                    for (var _e = tslib_1.__values(item.NS), _f = _e.next(); !_f.done; _f = _e.next()) {
+                        var member = _f.value;
+                        set.add(Number(member));
+                    }
+                }
+                catch (e_2_1) { e_2 = { error: e_2_1 }; }
+                finally {
+                    try {
+                        if (_f && !_f.done && (_b = _e.return)) _b.call(_e);
+                    }
+                    finally { if (e_2) throw e_2.error; }
+                }
+                return set;
+            }
+            return new NumberValueSet_1.NumberValueSet(item.NS.map(function (numberString) { return new NumberValue_1.NumberValue(numberString); }));
+        }
+        if (item.BS !== undefined) {
+            return new BinarySet_1.BinarySet(item.BS);
+        }
+        if (item.L !== undefined) {
+            return item.L.map(this.unmarshallValue.bind(this));
+        }
+        var _g = item.M, M = _g === void 0 ? {} : _g;
+        return Object.keys(M).reduce(function (map, key) {
+            map[key] = _this.unmarshallValue(M[key]);
+            return map;
+        }, {});
+    };
+    Marshaller.prototype.marshallComplexType = function (value) {
+        if (value === null) {
+            return { NULL: true };
+        }
+        if (NumberValue_1.NumberValue.isNumberValue(value)) {
+            return { N: value.toString() };
+        }
+        if (isBinaryValue(value)) {
+            return this.marshallBinaryValue(value);
+        }
+        if (isSet(value)) {
+            return this.marshallSet(value);
+        }
+        if (isMap(value)) {
+            return this.marshallMap(value);
+        }
+        if (isIterable(value)) {
+            return this.marshallList(value);
+        }
+        return this.marshallObject(value);
+    };
+    Marshaller.prototype.marshallBinaryValue = function (binary) {
+        if (binary.byteLength > 0 || this.onEmpty === 'leave') {
+            return { B: binary };
+        }
+        if (this.onEmpty === 'nullify') {
+            return { NULL: true };
+        }
+    };
+    Marshaller.prototype.marshallList = function (list) {
+        var e_3, _a;
+        var values = [];
+        try {
+            for (var list_1 = tslib_1.__values(list), list_1_1 = list_1.next(); !list_1_1.done; list_1_1 = list_1.next()) {
+                var value = list_1_1.value;
+                var marshalled = this.marshallValue(value);
+                if (marshalled) {
+                    values.push(marshalled);
+                }
+            }
+        }
+        catch (e_3_1) { e_3 = { error: e_3_1 }; }
+        finally {
+            try {
+                if (list_1_1 && !list_1_1.done && (_a = list_1.return)) _a.call(list_1);
+            }
+            finally { if (e_3) throw e_3.error; }
+        }
+        return { L: values };
+    };
+    Marshaller.prototype.marshallMap = function (map) {
+        var e_4, _a;
+        var members = {};
+        try {
+            for (var map_1 = tslib_1.__values(map), map_1_1 = map_1.next(); !map_1_1.done; map_1_1 = map_1.next()) {
+                var _b = tslib_1.__read(map_1_1.value, 2), key = _b[0], value = _b[1];
+                if (typeof key !== 'string') {
+                    if (this.onInvalid === 'omit') {
+                        continue;
+                    }
+                    throw new Error("MapAttributeValues must have strings as keys; " + typeof key + " received instead");
+                }
+                var marshalled = this.marshallValue(value);
+                if (marshalled) {
+                    members[key] = marshalled;
+                }
+            }
+        }
+        catch (e_4_1) { e_4 = { error: e_4_1 }; }
+        finally {
+            try {
+                if (map_1_1 && !map_1_1.done && (_a = map_1.return)) _a.call(map_1);
+            }
+            finally { if (e_4) throw e_4.error; }
+        }
+        return { M: members };
+    };
+    Marshaller.prototype.marshallObject = function (object) {
+        var _this = this;
+        return {
+            M: Object.keys(object).reduce(function (map, key) {
+                var marshalled = _this.marshallValue(object[key]);
+                if (marshalled) {
+                    map[key] = marshalled;
+                }
+                return map;
+            }, {}),
+        };
+    };
+    Marshaller.prototype.marshallSet = function (arg) {
+        switch (getSetType(arg[Symbol.iterator]().next().value)) {
+            case 'binary':
+                return this.collectSet(arg, isBinaryEmpty, 'BS', 'binary');
+            case 'number':
+                return this.collectSet(arg, isNumberEmpty, 'NS', 'number', stringifyNumber);
+            case 'string':
+                return this.collectSet(arg, isStringEmpty, 'SS', 'string');
+            case 'unknown':
+                if (this.onInvalid === 'throw') {
+                    throw new Error('Sets must be composed of strings,' +
+                        ' binary values, or numbers');
+                }
+                return undefined;
+            case 'undefined':
+                if (this.onEmpty === 'nullify') {
+                    return { NULL: true };
+                }
+        }
+    };
+    Marshaller.prototype.collectSet = function (set, isEmpty, tag, elementType, transform) {
+        var e_5, _a, _b;
+        var values = [];
+        try {
+            for (var set_1 = tslib_1.__values(set), set_1_1 = set_1.next(); !set_1_1.done; set_1_1 = set_1.next()) {
+                var element = set_1_1.value;
+                if (getSetType(element) !== elementType) {
+                    if (this.onInvalid === 'omit') {
+                        continue;
+                    }
+                    throw new Error("Unable to serialize " + typeof element + " as a member of a " + elementType + " set");
+                }
+                if (!isEmpty(element) ||
+                    this.onEmpty === 'leave') {
+                    values.push(transform ? transform(element) : element);
+                }
+            }
+        }
+        catch (e_5_1) { e_5 = { error: e_5_1 }; }
+        finally {
+            try {
+                if (set_1_1 && !set_1_1.done && (_a = set_1.return)) _a.call(set_1);
+            }
+            finally { if (e_5) throw e_5.error; }
+        }
+        if (values.length > 0 || this.onEmpty === 'leave') {
+            return _b = {}, _b[tag] = values, _b;
+        }
+        if (this.onEmpty === 'nullify') {
+            return { NULL: true };
+        }
+    };
+    Marshaller.prototype.handleEmptyString = function (value) {
+        switch (this.onEmpty) {
+            case 'leave':
+                return { S: value };
+            case 'nullify':
+                return { NULL: true };
+        }
+    };
+    return Marshaller;
+}());
+exports.Marshaller = Marshaller;
+function getSetType(arg) {
+    var type = typeof arg;
+    if (type === 'string' || type === 'number' || type === 'undefined') {
+        return type;
+    }
+    if (NumberValue_1.NumberValue.isNumberValue(arg)) {
+        return 'number';
+    }
+    if (ArrayBuffer.isView(arg) || isArrayBuffer_1.isArrayBuffer(arg)) {
+        return 'binary';
+    }
+    return 'unknown';
+}
+function isBinaryEmpty(arg) {
+    return arg.byteLength === 0;
+}
+function isBinaryValue(arg) {
+    return ArrayBuffer.isView(arg) || isArrayBuffer_1.isArrayBuffer(arg);
+}
+function isIterable(arg) {
+    return Boolean(arg) && typeof arg[Symbol.iterator] === 'function';
+}
+function isMap(arg) {
+    return Boolean(arg)
+        && Object.prototype.toString.call(arg) === '[object Map]';
+}
+function isNumberEmpty() {
+    return false;
+}
+function isSet(arg) {
+    return Boolean(arg)
+        && Object.prototype.toString.call(arg) === '[object Set]';
+}
+function isStringEmpty(arg) {
+    return arg.length === 0;
+}
+function stringifyNumber(arg) {
+    return arg.toString();
+}
+
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-auto-marshaller/build/NumberValue.js":
+/*!****************************************************************!*\
+  !*** ../../@aws/dynamodb-auto-marshaller/build/NumberValue.js ***!
+  \****************************************************************/
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var NUMBER_VALUE_TAG = 'DynamoDbNumberValue';
+var EXPECTED_TAG = "[object " + NUMBER_VALUE_TAG + "]";
+/**
+ * A number that may contain greater precision than can safely be stored in
+ * JavaScript's `number` data type. Numerical values are represented internally
+ * as strings (the format used by DynamoDB's JSON-based data representation
+ * schema).
+ */
+var NumberValue = /** @class */ (function () {
+    function NumberValue(value) {
+        this[Symbol.toStringTag] = NUMBER_VALUE_TAG;
+        this.value = value.toString().trim();
+    }
+    /**
+     * Convert the value to its desired JSON representation. Called by
+     * `JSON.stringify`.
+     */
+    NumberValue.prototype.toJSON = function () {
+        return this.valueOf();
+    };
+    /**
+     * Convert the value to its desired string representation. Called
+     * automatically when objects are coerced into strings.
+     */
+    NumberValue.prototype.toString = function () {
+        return this.value;
+    };
+    /**
+     * Convert the value to its desired literal representation. Called
+     * automatically when objects appear in arithmetic expressions.
+     */
+    NumberValue.prototype.valueOf = function () {
+        return Number(this.value);
+    };
+    /**
+     * Evaluate whether the provided value is a NumberValue object.
+     */
+    NumberValue.isNumberValue = function (arg) {
+        return (typeof NumberValue === 'function' && arg instanceof NumberValue)
+            || Object.prototype.toString.call(arg) === EXPECTED_TAG;
+    };
+    return NumberValue;
+}());
+exports.NumberValue = NumberValue;
+
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-auto-marshaller/build/NumberValueSet.js":
+/*!*******************************************************************!*\
+  !*** ../../@aws/dynamodb-auto-marshaller/build/NumberValueSet.js ***!
+  \*******************************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var tslib_1 = __webpack_require__(/*! tslib */ "../../tslib/tslib.es6.js");
+var ObjectSet_1 = __webpack_require__(/*! ./ObjectSet */ "../../@aws/dynamodb-auto-marshaller/build/ObjectSet.js");
+var NumberValue_1 = __webpack_require__(/*! ./NumberValue */ "../../@aws/dynamodb-auto-marshaller/build/NumberValue.js");
+/**
+ * A set of numeric values represented internally as NumberValue objects.
+ * Equality is determined by the string representation of the number and not by
+ * the identity or data type of the provided value.
+ */
+var NumberValueSet = /** @class */ (function (_super) {
+    tslib_1.__extends(NumberValueSet, _super);
+    function NumberValueSet() {
+        return _super !== null && _super.apply(this, arguments) || this;
+    }
+    /**
+     * @inheritDoc
+     *
+     * If a number or string is provided, it will be converted to a NumberValue
+     * object.
+     */
+    NumberValueSet.prototype.add = function (value) {
+        if (typeof value === 'number' || typeof value === 'string') {
+            value = new NumberValue_1.NumberValue(value);
+        }
+        _super.prototype.add.call(this, value);
+        return this;
+    };
+    NumberValueSet.prototype.delete = function (value) {
+        var valueString = value.toString();
+        var scrubbedValues = this._values
+            .filter(function (item) { return item.toString() !== valueString; });
+        var numRemoved = this._values.length - scrubbedValues.length;
+        this._values = scrubbedValues;
+        return numRemoved > 0;
+    };
+    NumberValueSet.prototype.has = function (value) {
+        var e_1, _a;
+        var valueString = value.toString();
+        try {
+            for (var _b = tslib_1.__values(this), _c = _b.next(); !_c.done; _c = _b.next()) {
+                var item = _c.value;
+                if (item.toString() === valueString) {
+                    return true;
+                }
+            }
+        }
+        catch (e_1_1) { e_1 = { error: e_1_1 }; }
+        finally {
+            try {
+                if (_c && !_c.done && (_a = _b.return)) _a.call(_b);
+            }
+            finally { if (e_1) throw e_1.error; }
+        }
+        return false;
+    };
+    return NumberValueSet;
+}(ObjectSet_1.ObjectSet));
+exports.NumberValueSet = NumberValueSet;
+
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-auto-marshaller/build/ObjectSet.js":
+/*!**************************************************************!*\
+  !*** ../../@aws/dynamodb-auto-marshaller/build/ObjectSet.js ***!
+  \**************************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var tslib_1 = __webpack_require__(/*! tslib */ "../../tslib/tslib.es6.js");
+var ObjectSet = /** @class */ (function () {
+    /**
+     * Creates a new ObjectSet and optionally seeds it with values.
+     *
+     * @param iterable An optional iterable of values to add to the set.
+     */
+    function ObjectSet(iterable) {
+        var e_1, _a;
+        /**
+         * Returns the string literal 'Set' for use by Object.prototype.toString.
+         * This allows for identifying Sets without checking constructor identity.
+         */
+        this[Symbol.toStringTag] = 'Set';
+        this._values = [];
+        if (iterable) {
+            try {
+                for (var iterable_1 = tslib_1.__values(iterable), iterable_1_1 = iterable_1.next(); !iterable_1_1.done; iterable_1_1 = iterable_1.next()) {
+                    var item = iterable_1_1.value;
+                    this.add(item);
+                }
+            }
+            catch (e_1_1) { e_1 = { error: e_1_1 }; }
+            finally {
+                try {
+                    if (iterable_1_1 && !iterable_1_1.done && (_a = iterable_1.return)) _a.call(iterable_1);
+                }
+                finally { if (e_1) throw e_1.error; }
+            }
+        }
+    }
+    /**
+     * Add a value to the set. If the value is already contained in the set, it
+     * will not be added a second time.
+     *
+     * @param value The value to add
+     */
+    ObjectSet.prototype.add = function (value) {
+        if (!this.has(value)) {
+            this._values.push(value);
+        }
+        return this;
+    };
+    /**
+     * Remove all values from the set.
+     */
+    ObjectSet.prototype.clear = function () {
+        this._values = [];
+    };
+    /**
+     * Returns an iterable two-member tuples for each item in the set, where
+     * the item is provided twice.
+     *
+     * Part of the ES2015 Set specification for compatibility with Map objects.
+     */
+    ObjectSet.prototype.entries = function () {
+        return this._values.map(function (value) { return [value, value]; })[Symbol.iterator]();
+    };
+    /**
+     * Invokes a callback once for each member of the set.
+     *
+     * @param callback The function to invoke with each set member
+     * @param thisArg The `this` context on which to invoke the callback
+     */
+    ObjectSet.prototype.forEach = function (callback, thisArg) {
+        var _this = this;
+        this._values.forEach(function (value, index, array) {
+            callback.call(thisArg, value, value, _this);
+        }, thisArg);
+    };
+    /**
+     * Returns an IterableIterator of each member of the set.
+     */
+    ObjectSet.prototype.keys = function () {
+        return this[Symbol.iterator]();
+    };
+    Object.defineProperty(ObjectSet.prototype, "size", {
+        /**
+         * Returns the number of members in the set.
+         */
+        get: function () {
+            return this._values.length;
+        },
+        enumerable: true,
+        configurable: true
+    });
+    /**
+     * Returns an IterableIterator of each member of the set.
+     */
+    ObjectSet.prototype.values = function () {
+        return this[Symbol.iterator]();
+    };
+    /**
+     * Returns an IterableIterator of each member of the set.
+     */
+    ObjectSet.prototype[Symbol.iterator] = function () {
+        return this._values[Symbol.iterator]();
+    };
+    return ObjectSet;
+}());
+exports.ObjectSet = ObjectSet;
+
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-auto-marshaller/build/index.js":
+/*!**********************************************************!*\
+  !*** ../../@aws/dynamodb-auto-marshaller/build/index.js ***!
+  \**********************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var tslib_1 = __webpack_require__(/*! tslib */ "../../tslib/tslib.es6.js");
+tslib_1.__exportStar(__webpack_require__(/*! ./BinarySet */ "../../@aws/dynamodb-auto-marshaller/build/BinarySet.js"), exports);
+tslib_1.__exportStar(__webpack_require__(/*! ./Marshaller */ "../../@aws/dynamodb-auto-marshaller/build/Marshaller.js"), exports);
+tslib_1.__exportStar(__webpack_require__(/*! ./NumberValue */ "../../@aws/dynamodb-auto-marshaller/build/NumberValue.js"), exports);
+tslib_1.__exportStar(__webpack_require__(/*! ./NumberValueSet */ "../../@aws/dynamodb-auto-marshaller/build/NumberValueSet.js"), exports);
+
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-auto-marshaller/build/isArrayBuffer.js":
+/*!******************************************************************!*\
+  !*** ../../@aws/dynamodb-auto-marshaller/build/isArrayBuffer.js ***!
+  \******************************************************************/
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+/**
+ * Determines if the provided argument is an ArrayBuffer object. Compatible with
+ * ArrayBuffers created in separate iframes and VMs.
+ */
+function isArrayBuffer(arg) {
+    return (typeof ArrayBuffer === 'function' && arg instanceof ArrayBuffer) ||
+        Object.prototype.toString.call(arg) === '[object ArrayBuffer]';
+}
+exports.isArrayBuffer = isArrayBuffer;
+
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-batch-iterator/build/BatchGet.js":
+/*!************************************************************!*\
+  !*** ../../@aws/dynamodb-batch-iterator/build/BatchGet.js ***!
+  \************************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var tslib_1 = __webpack_require__(/*! tslib */ "../../tslib/tslib.es6.js");
+var BatchOperation_1 = __webpack_require__(/*! ./BatchOperation */ "../../@aws/dynamodb-batch-iterator/build/BatchOperation.js");
+exports.MAX_READ_BATCH_SIZE = 100;
+/**
+ * Retrieves items from DynamoDB in batches of 100 or fewer via one or more
+ * BatchGetItem operations. The items may be from any number of tables.
+ *
+ * This method will automatically retry any get requests returned by DynamoDB as
+ * unprocessed. Exponential backoff on unprocessed items is employed on a
+ * per-table basis.
+ */
+var BatchGet = /** @class */ (function (_super) {
+    tslib_1.__extends(BatchGet, _super);
+    /**
+     * @param client    The AWS SDK client with which to communicate with
+     *                  DynamoDB.
+     * @param items     A synchronous or asynchronous iterable of tuples
+     *                  describing the reads to execute. The first member of the
+     *                  tuple should be the name of the table from which to
+     *                  read, and the second should be the marshalled key.
+     * @param options   Additional options to apply to the operations executed.
+     */
+    function BatchGet(client, items, _a) {
+        var _b = _a === void 0 ? {} : _a, ConsistentRead = _b.ConsistentRead, _c = _b.PerTableOptions, PerTableOptions = _c === void 0 ? {} : _c;
+        var _this = _super.call(this, client, items) || this;
+        _this.batchSize = exports.MAX_READ_BATCH_SIZE;
+        _this.consistentRead = ConsistentRead;
+        _this.options = PerTableOptions;
+        return _this;
+    }
+    BatchGet.prototype.doBatchRequest = function () {
+        return tslib_1.__awaiter(this, void 0, void 0, function () {
+            var e_1, _a, e_2, _b, e_3, _c, operationInput, batchSize, _d, tableName, item, _e, projection, consistentRead, attributeNames, _f, _g, Responses, _h, UnprocessedKeys, unprocessedTables, _j, _k, table, _l, _m, table, tableData, _o, _p, item;
+            return tslib_1.__generator(this, function (_q) {
+                switch (_q.label) {
+                    case 0:
+                        operationInput = { RequestItems: {} };
+                        batchSize = 0;
+                        while (this.toSend.length > 0) {
+                            _d = tslib_1.__read(this.toSend.shift(), 2), tableName = _d[0], item = _d[1];
+                            if (operationInput.RequestItems[tableName] === undefined) {
+                                _e = this.state[tableName], projection = _e.projection, consistentRead = _e.consistentRead, attributeNames = _e.attributeNames;
+                                operationInput.RequestItems[tableName] = {
+                                    Keys: [],
+                                    ConsistentRead: consistentRead,
+                                    ProjectionExpression: projection,
+                                    ExpressionAttributeNames: attributeNames,
+                                };
+                            }
+                            operationInput.RequestItems[tableName].Keys.push(item);
+                            if (++batchSize === this.batchSize) {
+                                break;
+                            }
+                        }
+                        return [4 /*yield*/, this.client.batchGetItem(operationInput).promise()];
+                    case 1:
+                        _f = _q.sent(), _g = _f.Responses, Responses = _g === void 0 ? {} : _g, _h = _f.UnprocessedKeys, UnprocessedKeys = _h === void 0 ? {} : _h;
+                        unprocessedTables = new Set();
+                        try {
+                            for (_j = tslib_1.__values(Object.keys(UnprocessedKeys)), _k = _j.next(); !_k.done; _k = _j.next()) {
+                                table = _k.value;
+                                unprocessedTables.add(table);
+                                this.handleThrottled(table, UnprocessedKeys[table].Keys);
+                            }
+                        }
+                        catch (e_1_1) { e_1 = { error: e_1_1 }; }
+                        finally {
+                            try {
+                                if (_k && !_k.done && (_a = _j.return)) _a.call(_j);
+                            }
+                            finally { if (e_1) throw e_1.error; }
+                        }
+                        this.movePendingToThrottled(unprocessedTables);
+                        try {
+                            for (_l = tslib_1.__values(Object.keys(Responses)), _m = _l.next(); !_m.done; _m = _l.next()) {
+                                table = _m.value;
+                                tableData = this.state[table];
+                                tableData.backoffFactor = Math.max(0, tableData.backoffFactor - 1);
+                                try {
+                                    for (_o = tslib_1.__values(Responses[table]), _p = _o.next(); !_p.done; _p = _o.next()) {
+                                        item = _p.value;
+                                        this.pending.push([table, item]);
+                                    }
+                                }
+                                catch (e_3_1) { e_3 = { error: e_3_1 }; }
+                                finally {
+                                    try {
+                                        if (_p && !_p.done && (_c = _o.return)) _c.call(_o);
+                                    }
+                                    finally { if (e_3) throw e_3.error; }
+                                }
+                            }
+                        }
+                        catch (e_2_1) { e_2 = { error: e_2_1 }; }
+                        finally {
+                            try {
+                                if (_m && !_m.done && (_b = _l.return)) _b.call(_l);
+                            }
+                            finally { if (e_2) throw e_2.error; }
+                        }
+                        return [2 /*return*/];
+                }
+            });
+        });
+    };
+    BatchGet.prototype.getInitialTableState = function (tableName) {
+        var _a = this.options[tableName] || {}, ExpressionAttributeNames = _a.ExpressionAttributeNames, ProjectionExpression = _a.ProjectionExpression, _b = _a.ConsistentRead, ConsistentRead = _b === void 0 ? this.consistentRead : _b;
+        return tslib_1.__assign({}, _super.prototype.getInitialTableState.call(this, tableName), { attributeNames: ExpressionAttributeNames, projection: ProjectionExpression, consistentRead: ConsistentRead });
+    };
+    return BatchGet;
+}(BatchOperation_1.BatchOperation));
+exports.BatchGet = BatchGet;
+//# sourceMappingURL=BatchGet.js.map
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-batch-iterator/build/BatchOperation.js":
+/*!******************************************************************!*\
+  !*** ../../@aws/dynamodb-batch-iterator/build/BatchOperation.js ***!
+  \******************************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var tslib_1 = __webpack_require__(/*! tslib */ "../../tslib/tslib.es6.js");
+if (Symbol && !Symbol.asyncIterator) {
+    Symbol.asyncIterator = Symbol.for("__@@asyncIterator__");
+}
+var BatchOperation = /** @class */ (function () {
+    /**
+     * @param client    The AWS SDK client with which to communicate with
+     *                  DynamoDB.
+     * @param items     A synchronous or asynchronous iterable of tuples
+     *                  describing the operations to execute. The first member
+     *                  of the tuple should be the name of the table targeted by
+     *                  the operation.
+     */
+    function BatchOperation(client, items) {
+        this.client = client;
+        /**
+         * Items that have been retrieved and are ready to be returned.
+         */
+        this.pending = [];
+        /**
+         * A mapping of table names to table-specific operation state (e.g., the
+         * number of throttling events experienced, etc.)
+         */
+        this.state = {};
+        /**
+         * Input elements that are prepared for immediate dispatch
+         */
+        this.toSend = [];
+        this.throttled = new Set();
+        this.sourceDone = false;
+        if (isIterable(items)) {
+            this.iterator = items[Symbol.iterator]();
+        }
+        else {
+            this.iterator = items[Symbol.asyncIterator]();
+        }
+        this.sourceNext = this.iterator.next();
+    }
+    BatchOperation.prototype.next = function () {
+        var _this = this;
+        if (this.lastResolved) {
+            this.lastResolved = this.lastResolved.then(function () { return _this.getNext(); });
+        }
+        else {
+            this.lastResolved = this.getNext();
+        }
+        return this.lastResolved;
+    };
+    BatchOperation.prototype[Symbol.asyncIterator] = function () {
+        return this;
+    };
+    /**
+     * Create and return the initial state object for a given DynamoDB table.
+     *
+     * @param tableName The name of the table whose initial state should be
+     *                  returned.
+     */
+    BatchOperation.prototype.getInitialTableState = function (tableName) {
+        return {
+            backoffFactor: 0,
+            name: tableName,
+        };
+    };
+    /**
+     * Accept an array of unprocessed items belonging to a single table and
+     * re-enqueue it for submission, making sure the appropriate level of
+     * backoff is applied to future operations on the same table.
+     *
+     * @param tableName     The table to which the unprocessed elements belong.
+     * @param unprocessed   Elements returned by DynamoDB as not yet processed.
+     *                      The elements should not be unmarshalled, but they
+     *                      should be reverted to the form used for elements
+     *                      that have not yet been sent.
+     */
+    BatchOperation.prototype.handleThrottled = function (tableName, unprocessed) {
+        var tableState = this.state[tableName];
+        tableState.backoffFactor++;
+        if (tableState.tableThrottling) {
+            this.throttled.delete(tableState.tableThrottling.backoffWaiter);
+            unprocessed.unshift.apply(unprocessed, tslib_1.__spread(tableState.tableThrottling.unprocessed));
+        }
+        tableState.tableThrottling = {
+            unprocessed: unprocessed,
+            backoffWaiter: new Promise(function (resolve) {
+                setTimeout(resolve, exponentialBackoff(tableState.backoffFactor), tableState);
+            })
+        };
+        this.throttled.add(tableState.tableThrottling.backoffWaiter);
+    };
+    /**
+     * Iterate over all pending writes and move those targeting throttled tables
+     * into the throttled queue.
+     *
+     * @param unprocessedTables     A set of tables for which some items were
+     *                              returned without being processed.
+     */
+    BatchOperation.prototype.movePendingToThrottled = function (unprocessedTables) {
+        for (var i = this.toSend.length - 1; i > -1; i--) {
+            var _a = tslib_1.__read(this.toSend[i], 2), table = _a[0], attributes = _a[1];
+            if (unprocessedTables.has(table)) {
+                this.state[table]
+                    .tableThrottling.unprocessed.push(attributes);
+                this.toSend.splice(i, 1);
+            }
+        }
+    };
+    BatchOperation.prototype.addToSendQueue = function (_a) {
+        var _b = tslib_1.__read(_a, 2), tableName = _b[0], attributes = _b[1];
+        if (!this.state[tableName]) {
+            this.state[tableName] = this.getInitialTableState(tableName);
+        }
+        var tableState = this.state[tableName];
+        if (tableState.tableThrottling) {
+            tableState.tableThrottling.unprocessed.push(attributes);
+        }
+        else {
+            this.toSend.push([tableName, attributes]);
+        }
+    };
+    BatchOperation.prototype.enqueueThrottled = function (table) {
+        var _a;
+        var _b = table.tableThrottling, backoffWaiter = _b.backoffWaiter, unprocessed = _b.unprocessed;
+        if (unprocessed.length > 0) {
+            (_a = this.toSend).push.apply(_a, tslib_1.__spread(unprocessed.map(function (attr) { return [table.name, attr]; })));
+        }
+        this.throttled.delete(backoffWaiter);
+        delete table.tableThrottling;
+    };
+    BatchOperation.prototype.getNext = function () {
+        return tslib_1.__awaiter(this, void 0, void 0, function () {
+            return tslib_1.__generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        if (this.sourceDone &&
+                            this.pending.length === 0 &&
+                            this.toSend.length === 0 &&
+                            this.throttled.size === 0) {
+                            return [2 /*return*/, { done: true }];
+                        }
+                        if (this.pending.length > 0) {
+                            return [2 /*return*/, {
+                                    done: false,
+                                    value: this.pending.shift()
+                                }];
+                        }
+                        return [4 /*yield*/, this.refillPending()];
+                    case 1:
+                        _a.sent();
+                        return [2 /*return*/, this.getNext()];
+                }
+            });
+        });
+    };
+    BatchOperation.prototype.refillPending = function () {
+        return tslib_1.__awaiter(this, void 0, void 0, function () {
+            var toProcess, _a, _b;
+            return tslib_1.__generator(this, function (_c) {
+                switch (_c.label) {
+                    case 0:
+                        if (!(!this.sourceDone &&
+                            this.toSend.length < this.batchSize)) return [3 /*break*/, 4];
+                        if (!isIteratorResult(this.sourceNext)) return [3 /*break*/, 1];
+                        _a = this.sourceNext;
+                        return [3 /*break*/, 3];
+                    case 1: return [4 /*yield*/, Promise.race([
+                            this.sourceNext,
+                            Promise.race(this.throttled)
+                        ])];
+                    case 2:
+                        _a = _c.sent();
+                        _c.label = 3;
+                    case 3:
+                        toProcess = _a;
+                        if (isIteratorResult(toProcess)) {
+                            this.sourceDone = toProcess.done;
+                            if (!this.sourceDone) {
+                                this.addToSendQueue(toProcess.value);
+                                this.sourceNext = this.iterator.next();
+                            }
+                        }
+                        else {
+                            this.enqueueThrottled(toProcess);
+                        }
+                        return [3 /*break*/, 0];
+                    case 4:
+                        if (!(this.toSend.length < this.batchSize && this.throttled.size > 0)) return [3 /*break*/, 6];
+                        _b = this.enqueueThrottled;
+                        return [4 /*yield*/, Promise.race(this.throttled)];
+                    case 5:
+                        _b.apply(this, [_c.sent()]);
+                        return [3 /*break*/, 4];
+                    case 6:
+                        if (!(this.toSend.length > 0)) return [3 /*break*/, 8];
+                        return [4 /*yield*/, this.doBatchRequest()];
+                    case 7:
+                        _c.sent();
+                        _c.label = 8;
+                    case 8: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    return BatchOperation;
+}());
+exports.BatchOperation = BatchOperation;
+function exponentialBackoff(attempts) {
+    return Math.floor(Math.random() * Math.pow(2, attempts));
+}
+function isIterable(arg) {
+    return Boolean(arg) && typeof arg[Symbol.iterator] === 'function';
+}
+function isIteratorResult(arg) {
+    return Boolean(arg) && typeof arg.done === 'boolean';
+}
+//# sourceMappingURL=BatchOperation.js.map
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-batch-iterator/build/BatchWrite.js":
+/*!**************************************************************!*\
+  !*** ../../@aws/dynamodb-batch-iterator/build/BatchWrite.js ***!
+  \**************************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var tslib_1 = __webpack_require__(/*! tslib */ "../../tslib/tslib.es6.js");
+var BatchOperation_1 = __webpack_require__(/*! ./BatchOperation */ "../../@aws/dynamodb-batch-iterator/build/BatchOperation.js");
+var itemIdentifier_1 = __webpack_require__(/*! ./itemIdentifier */ "../../@aws/dynamodb-batch-iterator/build/itemIdentifier.js");
+exports.MAX_WRITE_BATCH_SIZE = 25;
+/**
+ * Puts or deletes items from DynamoDB in batches of 25 or fewer via one or more
+ * BatchWriteItem operations. The items may belong to any number of tables.
+ *
+ * The iterable of writes to perform may be synchronous or asynchronous and is
+ * expected to yield tuples describing the writes to be performed. The first
+ * member should be the table name, and the second should be {WriteRequest}
+ * object that defines either a put request or a delete request.
+ *
+ * This method will automatically retry any write requests returned by DynamoDB
+ * as unprocessed. Exponential backoff on unprocessed items is employed on a
+ * per-table basis.
+ */
+var BatchWrite = /** @class */ (function (_super) {
+    tslib_1.__extends(BatchWrite, _super);
+    function BatchWrite() {
+        var _this = _super !== null && _super.apply(this, arguments) || this;
+        _this.batchSize = exports.MAX_WRITE_BATCH_SIZE;
+        return _this;
+    }
+    BatchWrite.prototype.doBatchRequest = function () {
+        return tslib_1.__awaiter(this, void 0, void 0, function () {
+            var e_1, _a, e_2, _b, e_3, _c, e_4, _d, inFlight, operationInput, batchSize, _e, tableName, marshalled, _f, UnprocessedItems, unprocessedTables, _g, _h, table, unprocessed, _j, _k, item, identifier, i, _l, tableName, attributes, processedTables, inFlight_1, inFlight_1_1, _m, tableName, marshalled, processedTables_1, processedTables_1_1, tableName;
+            return tslib_1.__generator(this, function (_o) {
+                switch (_o.label) {
+                    case 0:
+                        inFlight = [];
+                        operationInput = { RequestItems: {} };
+                        batchSize = 0;
+                        while (this.toSend.length > 0) {
+                            _e = tslib_1.__read(this.toSend.shift(), 2), tableName = _e[0], marshalled = _e[1];
+                            inFlight.push([tableName, marshalled]);
+                            if (operationInput.RequestItems[tableName] === undefined) {
+                                operationInput.RequestItems[tableName] = [];
+                            }
+                            operationInput.RequestItems[tableName].push(marshalled);
+                            if (++batchSize === this.batchSize) {
+                                break;
+                            }
+                        }
+                        return [4 /*yield*/, this.client.batchWriteItem(operationInput).promise()];
+                    case 1:
+                        _f = (_o.sent()).UnprocessedItems, UnprocessedItems = _f === void 0 ? {} : _f;
+                        unprocessedTables = new Set();
+                        try {
+                            for (_g = tslib_1.__values(Object.keys(UnprocessedItems)), _h = _g.next(); !_h.done; _h = _g.next()) {
+                                table = _h.value;
+                                unprocessedTables.add(table);
+                                unprocessed = [];
+                                try {
+                                    for (_j = tslib_1.__values(UnprocessedItems[table]), _k = _j.next(); !_k.done; _k = _j.next()) {
+                                        item = _k.value;
+                                        if (item.DeleteRequest || item.PutRequest) {
+                                            unprocessed.push(item);
+                                            identifier = itemIdentifier_1.itemIdentifier(table, item);
+                                            for (i = inFlight.length - 1; i >= 0; i--) {
+                                                _l = tslib_1.__read(inFlight[i], 2), tableName = _l[0], attributes = _l[1];
+                                                if (tableName === table &&
+                                                    itemIdentifier_1.itemIdentifier(tableName, attributes) === identifier) {
+                                                    inFlight.splice(i, 1);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                catch (e_2_1) { e_2 = { error: e_2_1 }; }
+                                finally {
+                                    try {
+                                        if (_k && !_k.done && (_b = _j.return)) _b.call(_j);
+                                    }
+                                    finally { if (e_2) throw e_2.error; }
+                                }
+                                this.handleThrottled(table, unprocessed);
+                            }
+                        }
+                        catch (e_1_1) { e_1 = { error: e_1_1 }; }
+                        finally {
+                            try {
+                                if (_h && !_h.done && (_a = _g.return)) _a.call(_g);
+                            }
+                            finally { if (e_1) throw e_1.error; }
+                        }
+                        this.movePendingToThrottled(unprocessedTables);
+                        processedTables = new Set();
+                        try {
+                            for (inFlight_1 = tslib_1.__values(inFlight), inFlight_1_1 = inFlight_1.next(); !inFlight_1_1.done; inFlight_1_1 = inFlight_1.next()) {
+                                _m = tslib_1.__read(inFlight_1_1.value, 2), tableName = _m[0], marshalled = _m[1];
+                                processedTables.add(tableName);
+                                this.pending.push([tableName, marshalled]);
+                            }
+                        }
+                        catch (e_3_1) { e_3 = { error: e_3_1 }; }
+                        finally {
+                            try {
+                                if (inFlight_1_1 && !inFlight_1_1.done && (_c = inFlight_1.return)) _c.call(inFlight_1);
+                            }
+                            finally { if (e_3) throw e_3.error; }
+                        }
+                        try {
+                            for (processedTables_1 = tslib_1.__values(processedTables), processedTables_1_1 = processedTables_1.next(); !processedTables_1_1.done; processedTables_1_1 = processedTables_1.next()) {
+                                tableName = processedTables_1_1.value;
+                                this.state[tableName].backoffFactor =
+                                    Math.max(0, this.state[tableName].backoffFactor - 1);
+                            }
+                        }
+                        catch (e_4_1) { e_4 = { error: e_4_1 }; }
+                        finally {
+                            try {
+                                if (processedTables_1_1 && !processedTables_1_1.done && (_d = processedTables_1.return)) _d.call(processedTables_1);
+                            }
+                            finally { if (e_4) throw e_4.error; }
+                        }
+                        return [2 /*return*/];
+                }
+            });
+        });
+    };
+    return BatchWrite;
+}(BatchOperation_1.BatchOperation));
+exports.BatchWrite = BatchWrite;
+//# sourceMappingURL=BatchWrite.js.map
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-batch-iterator/build/index.js":
+/*!*********************************************************!*\
+  !*** ../../@aws/dynamodb-batch-iterator/build/index.js ***!
+  \*********************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var tslib_1 = __webpack_require__(/*! tslib */ "../../tslib/tslib.es6.js");
+tslib_1.__exportStar(__webpack_require__(/*! ./BatchGet */ "../../@aws/dynamodb-batch-iterator/build/BatchGet.js"), exports);
+tslib_1.__exportStar(__webpack_require__(/*! ./BatchWrite */ "../../@aws/dynamodb-batch-iterator/build/BatchWrite.js"), exports);
+//# sourceMappingURL=index.js.map
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-batch-iterator/build/itemIdentifier.js":
+/*!******************************************************************!*\
+  !*** ../../@aws/dynamodb-batch-iterator/build/itemIdentifier.js ***!
+  \******************************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var tslib_1 = __webpack_require__(/*! tslib */ "../../tslib/tslib.es6.js");
+var bytes = __webpack_require__(/*! utf8-bytes */ "../../utf8-bytes/index.js");
+/**
+ * @internal
+ */
+function itemIdentifier(tableName, _a) {
+    var DeleteRequest = _a.DeleteRequest, PutRequest = _a.PutRequest;
+    if (DeleteRequest) {
+        return tableName + "::delete::" + serializeKeyTypeAttributes(DeleteRequest.Key);
+    }
+    else if (PutRequest) {
+        return tableName + "::put::" + serializeKeyTypeAttributes(PutRequest.Item);
+    }
+    throw new Error("Invalid write request provided");
+}
+exports.itemIdentifier = itemIdentifier;
+function serializeKeyTypeAttributes(attributes) {
+    var e_1, _a;
+    var keyTypeProperties = [];
+    try {
+        for (var _b = tslib_1.__values(Object.keys(attributes).sort()), _c = _b.next(); !_c.done; _c = _b.next()) {
+            var property = _c.value;
+            var attribute = attributes[property];
+            if (attribute.B) {
+                keyTypeProperties.push(property + "=" + toByteArray(attribute.B));
+            }
+            else if (attribute.N) {
+                keyTypeProperties.push(property + "=" + attribute.N);
+            }
+            else if (attribute.S) {
+                keyTypeProperties.push(property + "=" + attribute.S);
+            }
+        }
+    }
+    catch (e_1_1) { e_1 = { error: e_1_1 }; }
+    finally {
+        try {
+            if (_c && !_c.done && (_a = _b.return)) _a.call(_b);
+        }
+        finally { if (e_1) throw e_1.error; }
+    }
+    return keyTypeProperties.join('&');
+}
+function toByteArray(value) {
+    if (ArrayBuffer.isView(value)) {
+        return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+    }
+    if (typeof value === 'string') {
+        return Uint8Array.from(bytes(value));
+    }
+    if (isArrayBuffer(value)) {
+        return new Uint8Array(value);
+    }
+    throw new Error('Unrecognized binary type');
+}
+function isArrayBuffer(arg) {
+    return (typeof ArrayBuffer === 'function' && arg instanceof ArrayBuffer) ||
+        Object.prototype.toString.call(arg) === '[object ArrayBuffer]';
+}
+//# sourceMappingURL=itemIdentifier.js.map
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-data-mapper/build/DataMapper.js":
+/*!***********************************************************!*\
+  !*** ../../@aws/dynamodb-data-mapper/build/DataMapper.js ***!
+  \***********************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var tslib_1 = __webpack_require__(/*! tslib */ "../../tslib/tslib.es6.js");
+var constants_1 = __webpack_require__(/*! ./constants */ "../../@aws/dynamodb-data-mapper/build/constants.js");
+var ItemNotFoundException_1 = __webpack_require__(/*! ./ItemNotFoundException */ "../../@aws/dynamodb-data-mapper/build/ItemNotFoundException.js");
+var ParallelScanIterator_1 = __webpack_require__(/*! ./ParallelScanIterator */ "../../@aws/dynamodb-data-mapper/build/ParallelScanIterator.js");
+var protocols_1 = __webpack_require__(/*! ./protocols */ "../../@aws/dynamodb-data-mapper/build/protocols.js");
+var QueryIterator_1 = __webpack_require__(/*! ./QueryIterator */ "../../@aws/dynamodb-data-mapper/build/QueryIterator.js");
+var ScanIterator_1 = __webpack_require__(/*! ./ScanIterator */ "../../@aws/dynamodb-data-mapper/build/ScanIterator.js");
+var dynamodb_batch_iterator_1 = __webpack_require__(/*! @aws/dynamodb-batch-iterator */ "../../@aws/dynamodb-batch-iterator/build/index.js");
+var dynamodb_data_marshaller_1 = __webpack_require__(/*! @aws/dynamodb-data-marshaller */ "../../@aws/dynamodb-data-marshaller/build/index.js");
+var dynamodb_expressions_1 = __webpack_require__(/*! @aws/dynamodb-expressions */ "../../@aws/dynamodb-expressions/build/index.js");
+__webpack_require__(/*! ./asyncIteratorSymbolPolyfill */ "../../@aws/dynamodb-data-mapper/build/asyncIteratorSymbolPolyfill.js");
+/**
+ * Object mapper for domain object interaction with DynamoDB.
+ *
+ * To use, define a schema that describes how an item is represented in a
+ * DynamoDB table. This schema will be used to marshall a native JavaScript
+ * object into its desired persisted form. Attributes present on the object
+ * but not in the schema will be ignored.
+ */
+var DataMapper = /** @class */ (function () {
+    function DataMapper(_a) {
+        var client = _a.client, _b = _a.readConsistency, readConsistency = _b === void 0 ? 'eventual' : _b, _c = _a.skipVersionCheck, skipVersionCheck = _c === void 0 ? false : _c, _d = _a.tableNamePrefix, tableNamePrefix = _d === void 0 ? '' : _d;
+        client.config.customUserAgent = " dynamodb-data-mapper-js/" + constants_1.VERSION;
+        this.client = client;
+        this.readConsistency = readConsistency;
+        this.skipVersionCheck = skipVersionCheck;
+        this.tableNamePrefix = tableNamePrefix;
+    }
+    /**
+     * Deletes items from DynamoDB in batches of 25 or fewer via one or more
+     * BatchWriteItem operations. The items may be from any number of tables;
+     * tables and schemas for each item are determined using the
+     * {DynamoDbSchema} property and the {DynamoDbTable} property on defined on
+     * each item supplied.
+     *
+     * This method will automatically retry any delete requests returned by
+     * DynamoDB as unprocessed. Exponential backoff on unprocessed items is
+     * employed on a per-table basis.
+     *
+     * @param items A synchronous or asynchronous iterable of items to delete.
+     */
+    DataMapper.prototype.batchDelete = function (items) {
+        return tslib_1.__asyncGenerator(this, arguments, function batchDelete_1() {
+            var e_1, _a, iter, iter_1, iter_1_1, written, e_1_1;
+            return tslib_1.__generator(this, function (_b) {
+                switch (_b.label) {
+                    case 0:
+                        iter = this.batchWrite(function mapToDelete() {
+                            return tslib_1.__asyncGenerator(this, arguments, function mapToDelete_1() {
+                                var e_2, _a, items_1, items_1_1, item, e_2_1;
+                                return tslib_1.__generator(this, function (_b) {
+                                    switch (_b.label) {
+                                        case 0:
+                                            _b.trys.push([0, 7, 8, 13]);
+                                            items_1 = tslib_1.__asyncValues(items);
+                                            _b.label = 1;
+                                        case 1: return [4 /*yield*/, tslib_1.__await(items_1.next())];
+                                        case 2:
+                                            if (!(items_1_1 = _b.sent(), !items_1_1.done)) return [3 /*break*/, 6];
+                                            item = items_1_1.value;
+                                            return [4 /*yield*/, tslib_1.__await(['delete', item])];
+                                        case 3: return [4 /*yield*/, _b.sent()];
+                                        case 4:
+                                            _b.sent();
+                                            _b.label = 5;
+                                        case 5: return [3 /*break*/, 1];
+                                        case 6: return [3 /*break*/, 13];
+                                        case 7:
+                                            e_2_1 = _b.sent();
+                                            e_2 = { error: e_2_1 };
+                                            return [3 /*break*/, 13];
+                                        case 8:
+                                            _b.trys.push([8, , 11, 12]);
+                                            if (!(items_1_1 && !items_1_1.done && (_a = items_1.return))) return [3 /*break*/, 10];
+                                            return [4 /*yield*/, tslib_1.__await(_a.call(items_1))];
+                                        case 9:
+                                            _b.sent();
+                                            _b.label = 10;
+                                        case 10: return [3 /*break*/, 12];
+                                        case 11:
+                                            if (e_2) throw e_2.error;
+                                            return [7 /*endfinally*/];
+                                        case 12: return [7 /*endfinally*/];
+                                        case 13: return [2 /*return*/];
+                                    }
+                                });
+                            });
+                        }());
+                        _b.label = 1;
+                    case 1:
+                        _b.trys.push([1, 8, 9, 14]);
+                        iter_1 = tslib_1.__asyncValues(iter);
+                        _b.label = 2;
+                    case 2: return [4 /*yield*/, tslib_1.__await(iter_1.next())];
+                    case 3:
+                        if (!(iter_1_1 = _b.sent(), !iter_1_1.done)) return [3 /*break*/, 7];
+                        written = iter_1_1.value;
+                        return [4 /*yield*/, tslib_1.__await(written[1])];
+                    case 4: return [4 /*yield*/, _b.sent()];
+                    case 5:
+                        _b.sent();
+                        _b.label = 6;
+                    case 6: return [3 /*break*/, 2];
+                    case 7: return [3 /*break*/, 14];
+                    case 8:
+                        e_1_1 = _b.sent();
+                        e_1 = { error: e_1_1 };
+                        return [3 /*break*/, 14];
+                    case 9:
+                        _b.trys.push([9, , 12, 13]);
+                        if (!(iter_1_1 && !iter_1_1.done && (_a = iter_1.return))) return [3 /*break*/, 11];
+                        return [4 /*yield*/, tslib_1.__await(_a.call(iter_1))];
+                    case 10:
+                        _b.sent();
+                        _b.label = 11;
+                    case 11: return [3 /*break*/, 13];
+                    case 12:
+                        if (e_1) throw e_1.error;
+                        return [7 /*endfinally*/];
+                    case 13: return [7 /*endfinally*/];
+                    case 14: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    /**
+     * Retrieves items from DynamoDB in batches of 100 or fewer via one or more
+     * BatchGetItem operations. The items may be from any number of tables;
+     * tables and schemas for each item are determined using the
+     * {DynamoDbSchema} property and the {DynamoDbTable} property on defined on
+     * each item supplied.
+     *
+     * This method will automatically retry any get requests returned by
+     * DynamoDB as unprocessed. Exponential backoff on unprocessed items is
+     * employed on a per-table basis.
+     *
+     * @param items A synchronous or asynchronous iterable of items to get.
+     */
+    DataMapper.prototype.batchGet = function (items, _a) {
+        var _b = _a === void 0 ? {} : _a, _c = _b.readConsistency, readConsistency = _c === void 0 ? this.readConsistency : _c, _d = _b.perTableOptions, perTableOptions = _d === void 0 ? {} : _d;
+        return tslib_1.__asyncGenerator(this, arguments, function batchGet_1() {
+            var e_3, _a, state, options, batch, batch_1, batch_1_1, _b, tableName, marshalled, _c, keyProperties, itemSchemata, _d, constructor, schema, e_3_1;
+            return tslib_1.__generator(this, function (_e) {
+                switch (_e.label) {
+                    case 0:
+                        state = {};
+                        options = {};
+                        batch = new dynamodb_batch_iterator_1.BatchGet(this.client, this.mapGetBatch(items, state, perTableOptions, options), {
+                            ConsistentRead: readConsistency === 'strong' ? true : undefined,
+                            PerTableOptions: options
+                        });
+                        _e.label = 1;
+                    case 1:
+                        _e.trys.push([1, 8, 9, 14]);
+                        batch_1 = tslib_1.__asyncValues(batch);
+                        _e.label = 2;
+                    case 2: return [4 /*yield*/, tslib_1.__await(batch_1.next())];
+                    case 3:
+                        if (!(batch_1_1 = _e.sent(), !batch_1_1.done)) return [3 /*break*/, 7];
+                        _b = tslib_1.__read(batch_1_1.value, 2), tableName = _b[0], marshalled = _b[1];
+                        _c = state[tableName], keyProperties = _c.keyProperties, itemSchemata = _c.itemSchemata;
+                        _d = itemSchemata[itemIdentifier(marshalled, keyProperties)], constructor = _d.constructor, schema = _d.schema;
+                        return [4 /*yield*/, tslib_1.__await(dynamodb_data_marshaller_1.unmarshallItem(schema, marshalled, constructor))];
+                    case 4: return [4 /*yield*/, _e.sent()];
+                    case 5:
+                        _e.sent();
+                        _e.label = 6;
+                    case 6: return [3 /*break*/, 2];
+                    case 7: return [3 /*break*/, 14];
+                    case 8:
+                        e_3_1 = _e.sent();
+                        e_3 = { error: e_3_1 };
+                        return [3 /*break*/, 14];
+                    case 9:
+                        _e.trys.push([9, , 12, 13]);
+                        if (!(batch_1_1 && !batch_1_1.done && (_a = batch_1.return))) return [3 /*break*/, 11];
+                        return [4 /*yield*/, tslib_1.__await(_a.call(batch_1))];
+                    case 10:
+                        _e.sent();
+                        _e.label = 11;
+                    case 11: return [3 /*break*/, 13];
+                    case 12:
+                        if (e_3) throw e_3.error;
+                        return [7 /*endfinally*/];
+                    case 13: return [7 /*endfinally*/];
+                    case 14: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    /**
+     * Puts items into DynamoDB in batches of 25 or fewer via one or more
+     * BatchWriteItem operations. The items may be from any number of tables;
+     * tables and schemas for each item are determined using the
+     * {DynamoDbSchema} property and the {DynamoDbTable} property on defined on
+     * each item supplied.
+     *
+     * This method will automatically retry any put requests returned by
+     * DynamoDB as unprocessed. Exponential backoff on unprocessed items is
+     * employed on a per-table basis.
+     *
+     * @param items A synchronous or asynchronous iterable of items to put.
+     */
+    DataMapper.prototype.batchPut = function (items) {
+        return tslib_1.__asyncGenerator(this, arguments, function batchPut_1() {
+            var e_4, _a, generator, _b, _c, written, e_4_1;
+            return tslib_1.__generator(this, function (_d) {
+                switch (_d.label) {
+                    case 0:
+                        generator = isIterable(items)
+                            ? function mapToPut() {
+                                var e_5, _a, items_2, items_2_1, item, e_5_1;
+                                return tslib_1.__generator(this, function (_b) {
+                                    switch (_b.label) {
+                                        case 0:
+                                            _b.trys.push([0, 5, 6, 7]);
+                                            items_2 = tslib_1.__values(items), items_2_1 = items_2.next();
+                                            _b.label = 1;
+                                        case 1:
+                                            if (!!items_2_1.done) return [3 /*break*/, 4];
+                                            item = items_2_1.value;
+                                            return [4 /*yield*/, ['put', item]];
+                                        case 2:
+                                            _b.sent();
+                                            _b.label = 3;
+                                        case 3:
+                                            items_2_1 = items_2.next();
+                                            return [3 /*break*/, 1];
+                                        case 4: return [3 /*break*/, 7];
+                                        case 5:
+                                            e_5_1 = _b.sent();
+                                            e_5 = { error: e_5_1 };
+                                            return [3 /*break*/, 7];
+                                        case 6:
+                                            try {
+                                                if (items_2_1 && !items_2_1.done && (_a = items_2.return)) _a.call(items_2);
+                                            }
+                                            finally { if (e_5) throw e_5.error; }
+                                            return [7 /*endfinally*/];
+                                        case 7: return [2 /*return*/];
+                                    }
+                                });
+                            }()
+                            : function mapToPut() {
+                                return tslib_1.__asyncGenerator(this, arguments, function mapToPut_1() {
+                                    var e_6, _a, items_3, items_3_1, item, e_6_1;
+                                    return tslib_1.__generator(this, function (_b) {
+                                        switch (_b.label) {
+                                            case 0:
+                                                _b.trys.push([0, 7, 8, 13]);
+                                                items_3 = tslib_1.__asyncValues(items);
+                                                _b.label = 1;
+                                            case 1: return [4 /*yield*/, tslib_1.__await(items_3.next())];
+                                            case 2:
+                                                if (!(items_3_1 = _b.sent(), !items_3_1.done)) return [3 /*break*/, 6];
+                                                item = items_3_1.value;
+                                                return [4 /*yield*/, tslib_1.__await(['put', item])];
+                                            case 3: return [4 /*yield*/, _b.sent()];
+                                            case 4:
+                                                _b.sent();
+                                                _b.label = 5;
+                                            case 5: return [3 /*break*/, 1];
+                                            case 6: return [3 /*break*/, 13];
+                                            case 7:
+                                                e_6_1 = _b.sent();
+                                                e_6 = { error: e_6_1 };
+                                                return [3 /*break*/, 13];
+                                            case 8:
+                                                _b.trys.push([8, , 11, 12]);
+                                                if (!(items_3_1 && !items_3_1.done && (_a = items_3.return))) return [3 /*break*/, 10];
+                                                return [4 /*yield*/, tslib_1.__await(_a.call(items_3))];
+                                            case 9:
+                                                _b.sent();
+                                                _b.label = 10;
+                                            case 10: return [3 /*break*/, 12];
+                                            case 11:
+                                                if (e_6) throw e_6.error;
+                                                return [7 /*endfinally*/];
+                                            case 12: return [7 /*endfinally*/];
+                                            case 13: return [2 /*return*/];
+                                        }
+                                    });
+                                });
+                            }();
+                        _d.label = 1;
+                    case 1:
+                        _d.trys.push([1, 8, 9, 14]);
+                        _b = tslib_1.__asyncValues(this.batchWrite(generator));
+                        _d.label = 2;
+                    case 2: return [4 /*yield*/, tslib_1.__await(_b.next())];
+                    case 3:
+                        if (!(_c = _d.sent(), !_c.done)) return [3 /*break*/, 7];
+                        written = _c.value;
+                        return [4 /*yield*/, tslib_1.__await(written[1])];
+                    case 4: return [4 /*yield*/, _d.sent()];
+                    case 5:
+                        _d.sent();
+                        _d.label = 6;
+                    case 6: return [3 /*break*/, 2];
+                    case 7: return [3 /*break*/, 14];
+                    case 8:
+                        e_4_1 = _d.sent();
+                        e_4 = { error: e_4_1 };
+                        return [3 /*break*/, 14];
+                    case 9:
+                        _d.trys.push([9, , 12, 13]);
+                        if (!(_c && !_c.done && (_a = _b.return))) return [3 /*break*/, 11];
+                        return [4 /*yield*/, tslib_1.__await(_a.call(_b))];
+                    case 10:
+                        _d.sent();
+                        _d.label = 11;
+                    case 11: return [3 /*break*/, 13];
+                    case 12:
+                        if (e_4) throw e_4.error;
+                        return [7 /*endfinally*/];
+                    case 13: return [7 /*endfinally*/];
+                    case 14: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    /**
+     * Puts or deletes items from DynamoDB in batches of 25 or fewer via one or
+     * more BatchWriteItem operations. The items may belong to any number of
+     * tables; tables and schemas for each item are determined using the
+     * {DynamoDbSchema} property and the {DynamoDbTable} property on defined on
+     * each item supplied.
+     *
+     * This method will automatically retry any write requests returned by
+     * DynamoDB as unprocessed. Exponential backoff on unprocessed items is
+     * employed on a per-table basis.
+     *
+     * @param items A synchronous or asynchronous iterable of tuples of the
+     * string 'put'|'delete' and the item on which to perform the specified
+     * write action.
+     */
+    DataMapper.prototype.batchWrite = function (items) {
+        return tslib_1.__asyncGenerator(this, arguments, function batchWrite_1() {
+            var e_7, _a, state, batch, batch_2, batch_2_1, _b, tableName, _c, DeleteRequest, PutRequest, _d, keyProperties, itemSchemata, attributes, _e, constructor, schema, e_7_1;
+            return tslib_1.__generator(this, function (_f) {
+                switch (_f.label) {
+                    case 0:
+                        state = {};
+                        batch = new dynamodb_batch_iterator_1.BatchWrite(this.client, this.mapWriteBatch(items, state));
+                        _f.label = 1;
+                    case 1:
+                        _f.trys.push([1, 8, 9, 14]);
+                        batch_2 = tslib_1.__asyncValues(batch);
+                        _f.label = 2;
+                    case 2: return [4 /*yield*/, tslib_1.__await(batch_2.next())];
+                    case 3:
+                        if (!(batch_2_1 = _f.sent(), !batch_2_1.done)) return [3 /*break*/, 7];
+                        _b = tslib_1.__read(batch_2_1.value, 2), tableName = _b[0], _c = _b[1], DeleteRequest = _c.DeleteRequest, PutRequest = _c.PutRequest;
+                        _d = state[tableName], keyProperties = _d.keyProperties, itemSchemata = _d.itemSchemata;
+                        attributes = PutRequest
+                            ? PutRequest.Item
+                            : (DeleteRequest || { Key: {} }).Key;
+                        _e = itemSchemata[itemIdentifier(attributes, keyProperties)], constructor = _e.constructor, schema = _e.schema;
+                        return [4 /*yield*/, tslib_1.__await([
+                                PutRequest ? 'put' : 'delete',
+                                dynamodb_data_marshaller_1.unmarshallItem(schema, attributes, constructor)
+                            ])];
+                    case 4: return [4 /*yield*/, _f.sent()];
+                    case 5:
+                        _f.sent();
+                        _f.label = 6;
+                    case 6: return [3 /*break*/, 2];
+                    case 7: return [3 /*break*/, 14];
+                    case 8:
+                        e_7_1 = _f.sent();
+                        e_7 = { error: e_7_1 };
+                        return [3 /*break*/, 14];
+                    case 9:
+                        _f.trys.push([9, , 12, 13]);
+                        if (!(batch_2_1 && !batch_2_1.done && (_a = batch_2.return))) return [3 /*break*/, 11];
+                        return [4 /*yield*/, tslib_1.__await(_a.call(batch_2))];
+                    case 10:
+                        _f.sent();
+                        _f.label = 11;
+                    case 11: return [3 /*break*/, 13];
+                    case 12:
+                        if (e_7) throw e_7.error;
+                        return [7 /*endfinally*/];
+                    case 13: return [7 /*endfinally*/];
+                    case 14: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    /**
+     * Perform a CreateTable operation using the schema accessible via the
+     * {DynamoDbSchema} property and the table name accessible via the
+     * {DynamoDbTable} property on the prototype of the constructor supplied.
+     *
+     * The promise returned by this method will not resolve until the table is
+     * active and ready for use.
+     *
+     * @param valueConstructor  The constructor used for values in the table.
+     * @param options           Options to configure the CreateTable operation
+     */
+    DataMapper.prototype.createTable = function (valueConstructor, _a) {
+        var readCapacityUnits = _a.readCapacityUnits, _b = _a.streamViewType, streamViewType = _b === void 0 ? 'NONE' : _b, writeCapacityUnits = _a.writeCapacityUnits, _c = _a.indexOptions, indexOptions = _c === void 0 ? {} : _c;
+        return tslib_1.__awaiter(this, void 0, void 0, function () {
+            var schema, _d, attributes, indexKeys, tableKeys, TableName, _e, TableStatus;
+            return tslib_1.__generator(this, function (_f) {
+                switch (_f.label) {
+                    case 0:
+                        schema = protocols_1.getSchema(valueConstructor.prototype);
+                        _d = dynamodb_data_marshaller_1.keysFromSchema(schema), attributes = _d.attributes, indexKeys = _d.indexKeys, tableKeys = _d.tableKeys;
+                        TableName = this.getTableName(valueConstructor.prototype);
+                        return [4 /*yield*/, this.client.createTable(tslib_1.__assign({}, indexDefinitions(indexKeys, indexOptions, schema), { TableName: TableName, ProvisionedThroughput: {
+                                    ReadCapacityUnits: readCapacityUnits,
+                                    WriteCapacityUnits: writeCapacityUnits,
+                                }, AttributeDefinitions: attributeDefinitionList(attributes), KeySchema: keyTypesToElementList(tableKeys), StreamSpecification: streamViewType === 'NONE'
+                                    ? { StreamEnabled: false }
+                                    : { StreamEnabled: true, StreamViewType: streamViewType } })).promise()];
+                    case 1:
+                        _e = (_f.sent()).TableDescription, TableStatus = (_e === void 0 ? { TableStatus: 'CREATING' } : _e).TableStatus;
+                        if (!(TableStatus !== 'ACTIVE')) return [3 /*break*/, 3];
+                        return [4 /*yield*/, this.client.waitFor('tableExists', { TableName: TableName }).promise()];
+                    case 2:
+                        _f.sent();
+                        _f.label = 3;
+                    case 3: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    DataMapper.prototype.delete = function (itemOrParameters, options) {
+        if (options === void 0) { options = {}; }
+        return tslib_1.__awaiter(this, void 0, void 0, function () {
+            var e_8, _a, item, condition, _b, returnValues, _c, skipVersionCheck, schema, req, _d, _e, prop, inputMember, fieldSchema, versionCondition, attributes, Attributes;
+            return tslib_1.__generator(this, function (_f) {
+                switch (_f.label) {
+                    case 0:
+                        if ('item' in itemOrParameters &&
+                            itemOrParameters.item[protocols_1.DynamoDbTable]) {
+                            item = itemOrParameters.item;
+                            options = itemOrParameters;
+                        }
+                        else {
+                            item = itemOrParameters;
+                        }
+                        condition = options.condition, _b = options.returnValues, returnValues = _b === void 0 ? 'ALL_OLD' : _b, _c = options.skipVersionCheck, skipVersionCheck = _c === void 0 ? this.skipVersionCheck : _c;
+                        schema = protocols_1.getSchema(item);
+                        req = {
+                            TableName: this.getTableName(item),
+                            Key: dynamodb_data_marshaller_1.marshallKey(schema, item),
+                            ReturnValues: returnValues,
+                        };
+                        if (!skipVersionCheck) {
+                            try {
+                                for (_d = tslib_1.__values(Object.keys(schema)), _e = _d.next(); !_e.done; _e = _d.next()) {
+                                    prop = _e.value;
+                                    inputMember = item[prop];
+                                    fieldSchema = schema[prop];
+                                    if (isVersionAttribute(fieldSchema) && inputMember !== undefined) {
+                                        versionCondition = handleVersionAttribute(prop, inputMember).condition;
+                                        condition = condition
+                                            ? { type: 'And', conditions: [condition, versionCondition] }
+                                            : versionCondition;
+                                    }
+                                }
+                            }
+                            catch (e_8_1) { e_8 = { error: e_8_1 }; }
+                            finally {
+                                try {
+                                    if (_e && !_e.done && (_a = _d.return)) _a.call(_d);
+                                }
+                                finally { if (e_8) throw e_8.error; }
+                            }
+                        }
+                        if (condition) {
+                            attributes = new dynamodb_expressions_1.ExpressionAttributes();
+                            req.ConditionExpression = dynamodb_data_marshaller_1.marshallConditionExpression(condition, schema, attributes).expression;
+                            if (Object.keys(attributes.names).length > 0) {
+                                req.ExpressionAttributeNames = attributes.names;
+                            }
+                            if (Object.keys(attributes.values).length > 0) {
+                                req.ExpressionAttributeValues = attributes.values;
+                            }
+                        }
+                        return [4 /*yield*/, this.client.deleteItem(req).promise()];
+                    case 1:
+                        Attributes = (_f.sent()).Attributes;
+                        if (Attributes) {
+                            return [2 /*return*/, dynamodb_data_marshaller_1.unmarshallItem(schema, Attributes, item.constructor)];
+                        }
+                        return [2 /*return*/];
+                }
+            });
+        });
+    };
+    /**
+     * Perform a DeleteTable operation using the schema accessible via the
+     * {DynamoDbSchema} property and the table name accessible via the
+     * {DynamoDbTable} property on the prototype of the constructor supplied.
+     *
+     * The promise returned by this method will not resolve until the table is
+     * deleted and can no longer be used.
+     *
+     * @param valueConstructor  The constructor used for values in the table.
+     */
+    DataMapper.prototype.deleteTable = function (valueConstructor) {
+        return tslib_1.__awaiter(this, void 0, void 0, function () {
+            var TableName;
+            return tslib_1.__generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        TableName = this.getTableName(valueConstructor.prototype);
+                        return [4 /*yield*/, this.client.deleteTable({ TableName: TableName }).promise()];
+                    case 1:
+                        _a.sent();
+                        return [4 /*yield*/, this.client.waitFor('tableNotExists', { TableName: TableName }).promise()];
+                    case 2:
+                        _a.sent();
+                        return [2 /*return*/];
+                }
+            });
+        });
+    };
+    /**
+     * If the table does not already exist, perform a CreateTable operation
+     * using the schema accessible via the {DynamoDbSchema} property and the
+     * table name accessible via the {DynamoDbTable} property on the prototype
+     * of the constructor supplied.
+     *
+     * The promise returned by this method will not resolve until the table is
+     * active and ready for use.
+     *
+     * @param valueConstructor  The constructor used for values in the table.
+     * @param options           Options to configure the CreateTable operation
+     */
+    DataMapper.prototype.ensureTableExists = function (valueConstructor, options) {
+        return tslib_1.__awaiter(this, void 0, void 0, function () {
+            var TableName, _a, TableStatus, err_1;
+            return tslib_1.__generator(this, function (_b) {
+                switch (_b.label) {
+                    case 0:
+                        TableName = this.getTableName(valueConstructor.prototype);
+                        _b.label = 1;
+                    case 1:
+                        _b.trys.push([1, 5, , 9]);
+                        return [4 /*yield*/, this.client.describeTable({ TableName: TableName }).promise()];
+                    case 2:
+                        _a = (_b.sent()).Table, TableStatus = (_a === void 0 ? { TableStatus: 'CREATING' } : _a).TableStatus;
+                        if (!(TableStatus !== 'ACTIVE')) return [3 /*break*/, 4];
+                        return [4 /*yield*/, this.client.waitFor('tableExists', { TableName: TableName }).promise()];
+                    case 3:
+                        _b.sent();
+                        _b.label = 4;
+                    case 4: return [3 /*break*/, 9];
+                    case 5:
+                        err_1 = _b.sent();
+                        if (!(err_1.name === 'ResourceNotFoundException')) return [3 /*break*/, 7];
+                        return [4 /*yield*/, this.createTable(valueConstructor, options)];
+                    case 6:
+                        _b.sent();
+                        return [3 /*break*/, 8];
+                    case 7: throw err_1;
+                    case 8: return [3 /*break*/, 9];
+                    case 9: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    /**
+     * If the table exists, perform a DeleteTable operation using the schema
+     * accessible via the {DynamoDbSchema} property and the table name
+     * accessible via the {DynamoDbTable} property on the prototype of the
+     * constructor supplied.
+     *
+     * The promise returned by this method will not resolve until the table is
+     * deleted and can no longer be used.
+     *
+     * @param valueConstructor  The constructor used for values in the table.
+     */
+    DataMapper.prototype.ensureTableNotExists = function (valueConstructor) {
+        return tslib_1.__awaiter(this, void 0, void 0, function () {
+            var TableName, _a, status, err_2;
+            return tslib_1.__generator(this, function (_b) {
+                switch (_b.label) {
+                    case 0:
+                        TableName = this.getTableName(valueConstructor.prototype);
+                        _b.label = 1;
+                    case 1:
+                        _b.trys.push([1, 8, , 9]);
+                        return [4 /*yield*/, this.client.describeTable({ TableName: TableName }).promise()];
+                    case 2:
+                        _a = (_b.sent()).Table, status = (_a === void 0 ? { TableStatus: 'CREATING' } : _a).TableStatus;
+                        if (!(status === 'DELETING')) return [3 /*break*/, 4];
+                        return [4 /*yield*/, this.client.waitFor('tableNotExists', { TableName: TableName })
+                                .promise()];
+                    case 3:
+                        _b.sent();
+                        return [2 /*return*/];
+                    case 4:
+                        if (!(status === 'CREATING' || status === 'UPDATING')) return [3 /*break*/, 6];
+                        return [4 /*yield*/, this.client.waitFor('tableExists', { TableName: TableName })
+                                .promise()];
+                    case 5:
+                        _b.sent();
+                        _b.label = 6;
+                    case 6: return [4 /*yield*/, this.deleteTable(valueConstructor)];
+                    case 7:
+                        _b.sent();
+                        return [3 /*break*/, 9];
+                    case 8:
+                        err_2 = _b.sent();
+                        if (err_2.name !== 'ResourceNotFoundException') {
+                            throw err_2;
+                        }
+                        return [3 /*break*/, 9];
+                    case 9: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    DataMapper.prototype.get = function (itemOrParameters, options) {
+        if (options === void 0) { options = {}; }
+        return tslib_1.__awaiter(this, void 0, void 0, function () {
+            var item, projection, _a, readConsistency, schema, req, attributes, Item;
+            return tslib_1.__generator(this, function (_b) {
+                switch (_b.label) {
+                    case 0:
+                        if ('item' in itemOrParameters &&
+                            itemOrParameters.item[protocols_1.DynamoDbTable]) {
+                            item = itemOrParameters.item;
+                            options = itemOrParameters;
+                        }
+                        else {
+                            item = itemOrParameters;
+                        }
+                        projection = options.projection, _a = options.readConsistency, readConsistency = _a === void 0 ? this.readConsistency : _a;
+                        schema = protocols_1.getSchema(item);
+                        req = {
+                            TableName: this.getTableName(item),
+                            Key: dynamodb_data_marshaller_1.marshallKey(schema, item)
+                        };
+                        if (readConsistency === 'strong') {
+                            req.ConsistentRead = true;
+                        }
+                        if (projection) {
+                            attributes = new dynamodb_expressions_1.ExpressionAttributes();
+                            req.ProjectionExpression = dynamodb_expressions_1.serializeProjectionExpression(projection.map(function (propName) { return dynamodb_data_marshaller_1.toSchemaName(propName, schema); }), attributes);
+                            if (Object.keys(attributes.names).length > 0) {
+                                req.ExpressionAttributeNames = attributes.names;
+                            }
+                        }
+                        return [4 /*yield*/, this.client.getItem(req).promise()];
+                    case 1:
+                        Item = (_b.sent()).Item;
+                        if (Item) {
+                            return [2 /*return*/, dynamodb_data_marshaller_1.unmarshallItem(schema, Item, item.constructor)];
+                        }
+                        throw new ItemNotFoundException_1.ItemNotFoundException(req);
+                }
+            });
+        });
+    };
+    DataMapper.prototype.parallelScan = function (ctorOrParams, segments, options) {
+        if (options === void 0) { options = {}; }
+        var valueConstructor;
+        if (typeof segments !== 'number') {
+            valueConstructor = ctorOrParams.valueConstructor;
+            segments = ctorOrParams.segments;
+            options = ctorOrParams;
+        }
+        else {
+            valueConstructor = ctorOrParams;
+        }
+        return new ParallelScanIterator_1.ParallelScanIterator(this.client, valueConstructor, segments, tslib_1.__assign({ readConsistency: this.readConsistency }, options, { tableNamePrefix: this.tableNamePrefix }));
+    };
+    DataMapper.prototype.put = function (itemOrParameters, options) {
+        if (options === void 0) { options = {}; }
+        return tslib_1.__awaiter(this, void 0, void 0, function () {
+            var e_9, _a, item, condition, _b, skipVersionCheck, schema, req, _c, _d, key, inputMember, fieldSchema, _e, attributeName, versionCond, attributes;
+            return tslib_1.__generator(this, function (_f) {
+                switch (_f.label) {
+                    case 0:
+                        if ('item' in itemOrParameters &&
+                            itemOrParameters.item[protocols_1.DynamoDbTable]) {
+                            item = itemOrParameters.item;
+                            options = itemOrParameters;
+                        }
+                        else {
+                            item = itemOrParameters;
+                        }
+                        condition = options.condition, _b = options.skipVersionCheck, skipVersionCheck = _b === void 0 ? this.skipVersionCheck : _b;
+                        schema = protocols_1.getSchema(item);
+                        req = {
+                            TableName: this.getTableName(item),
+                            Item: dynamodb_data_marshaller_1.marshallItem(schema, item),
+                        };
+                        if (!skipVersionCheck) {
+                            try {
+                                for (_c = tslib_1.__values(Object.keys(schema)), _d = _c.next(); !_d.done; _d = _c.next()) {
+                                    key = _d.value;
+                                    inputMember = item[key];
+                                    fieldSchema = schema[key];
+                                    _e = fieldSchema.attributeName, attributeName = _e === void 0 ? key : _e;
+                                    if (isVersionAttribute(fieldSchema)) {
+                                        versionCond = handleVersionAttribute(key, inputMember).condition;
+                                        if (req.Item[attributeName]) {
+                                            req.Item[attributeName].N = (Number(req.Item[attributeName].N) + 1).toString();
+                                        }
+                                        else {
+                                            req.Item[attributeName] = { N: "0" };
+                                        }
+                                        condition = condition
+                                            ? { type: 'And', conditions: [condition, versionCond] }
+                                            : versionCond;
+                                    }
+                                }
+                            }
+                            catch (e_9_1) { e_9 = { error: e_9_1 }; }
+                            finally {
+                                try {
+                                    if (_d && !_d.done && (_a = _c.return)) _a.call(_c);
+                                }
+                                finally { if (e_9) throw e_9.error; }
+                            }
+                        }
+                        if (condition) {
+                            attributes = new dynamodb_expressions_1.ExpressionAttributes();
+                            req.ConditionExpression = dynamodb_data_marshaller_1.marshallConditionExpression(condition, schema, attributes).expression;
+                            if (Object.keys(attributes.names).length > 0) {
+                                req.ExpressionAttributeNames = attributes.names;
+                            }
+                            if (Object.keys(attributes.values).length > 0) {
+                                req.ExpressionAttributeValues = attributes.values;
+                            }
+                        }
+                        return [4 /*yield*/, this.client.putItem(req).promise()];
+                    case 1:
+                        _f.sent();
+                        return [2 /*return*/, dynamodb_data_marshaller_1.unmarshallItem(schema, req.Item, item.constructor)];
+                }
+            });
+        });
+    };
+    DataMapper.prototype.query = function (valueConstructorOrParameters, keyCondition, options) {
+        if (options === void 0) { options = {}; }
+        var valueConstructor;
+        if (!keyCondition) {
+            valueConstructor = valueConstructorOrParameters.valueConstructor;
+            keyCondition = valueConstructorOrParameters.keyCondition;
+            options = valueConstructorOrParameters;
+        }
+        else {
+            valueConstructor = valueConstructorOrParameters;
+        }
+        return new QueryIterator_1.QueryIterator(this.client, valueConstructor, keyCondition, tslib_1.__assign({ readConsistency: this.readConsistency }, options, { tableNamePrefix: this.tableNamePrefix }));
+    };
+    DataMapper.prototype.scan = function (ctorOrParams, options) {
+        if (options === void 0) { options = {}; }
+        var valueConstructor;
+        if ('valueConstructor' in ctorOrParams &&
+            ctorOrParams.valueConstructor.prototype &&
+            ctorOrParams.valueConstructor.prototype[protocols_1.DynamoDbTable]) {
+            valueConstructor = ctorOrParams.valueConstructor;
+            options = ctorOrParams;
+        }
+        else {
+            valueConstructor = ctorOrParams;
+        }
+        return new ScanIterator_1.ScanIterator(this.client, valueConstructor, tslib_1.__assign({ readConsistency: this.readConsistency }, options, { tableNamePrefix: this.tableNamePrefix }));
+    };
+    DataMapper.prototype.update = function (itemOrParameters, options) {
+        if (options === void 0) { options = {}; }
+        return tslib_1.__awaiter(this, void 0, void 0, function () {
+            var e_10, _a, item, condition, _b, onMissing, _c, skipVersionCheck, schema, expr, itemKey, _d, _e, key, inputMember, fieldSchema, _f, versionCond, value, marshalled;
+            return tslib_1.__generator(this, function (_g) {
+                if ('item' in itemOrParameters &&
+                    itemOrParameters.item[protocols_1.DynamoDbTable]) {
+                    item = itemOrParameters.item;
+                    options = itemOrParameters;
+                }
+                else {
+                    item = itemOrParameters;
+                }
+                condition = options.condition, _b = options.onMissing, onMissing = _b === void 0 ? 'remove' : _b, _c = options.skipVersionCheck, skipVersionCheck = _c === void 0 ? this.skipVersionCheck : _c;
+                schema = protocols_1.getSchema(item);
+                expr = new dynamodb_expressions_1.UpdateExpression();
+                itemKey = {};
+                try {
+                    for (_d = tslib_1.__values(Object.keys(schema)), _e = _d.next(); !_e.done; _e = _d.next()) {
+                        key = _e.value;
+                        inputMember = item[key];
+                        fieldSchema = schema[key];
+                        if (dynamodb_data_marshaller_1.isKey(fieldSchema)) {
+                            itemKey[key] = inputMember;
+                        }
+                        else if (isVersionAttribute(fieldSchema)) {
+                            _f = handleVersionAttribute(key, inputMember), versionCond = _f.condition, value = _f.value;
+                            expr.set(key, value);
+                            if (!skipVersionCheck) {
+                                condition = condition
+                                    ? { type: 'And', conditions: [condition, versionCond] }
+                                    : versionCond;
+                            }
+                        }
+                        else if (inputMember === undefined) {
+                            if (onMissing === 'remove') {
+                                expr.remove(key);
+                            }
+                        }
+                        else {
+                            marshalled = dynamodb_data_marshaller_1.marshallValue(fieldSchema, inputMember);
+                            if (marshalled) {
+                                expr.set(key, new dynamodb_expressions_1.AttributeValue(marshalled));
+                            }
+                        }
+                    }
+                }
+                catch (e_10_1) { e_10 = { error: e_10_1 }; }
+                finally {
+                    try {
+                        if (_e && !_e.done && (_a = _d.return)) _a.call(_d);
+                    }
+                    finally { if (e_10) throw e_10.error; }
+                }
+                return [2 /*return*/, this.doExecuteUpdateExpression(expr, itemKey, protocols_1.getSchema(item), protocols_1.getTableName(item), item.constructor, { condition: condition })];
+            });
+        });
+    };
+    /**
+     * Execute a custom update expression using the schema and table name
+     * defined on the provided `valueConstructor`.
+     *
+     * This method does not support automatic version checking, as the current
+     * state of a table's version attribute cannot be inferred from an update
+     * expression object. To perform a version check manually, add a condition
+     * expression:
+     *
+     * ```typescript
+     *  const currentVersion = 1;
+     *  updateExpression.set('nameOfVersionAttribute', currentVersion + 1);
+     *  const condition = {
+     *      type: 'Equals',
+     *      subject: 'nameOfVersionAttribute',
+     *      object: currentVersion
+     *  };
+     *
+     *  const updated = await mapper.executeUpdateExpression(
+     *      updateExpression,
+     *      itemKey,
+     *      constructor,
+     *      {condition}
+     *  );
+     * ```
+     *
+     * **NB:** Property names and attribute paths in the update expression
+     * should reflect the names used in the schema.
+     *
+     * @param expression        The update expression to execute.
+     * @param key               The full key to identify the object being
+     *                          updated.
+     * @param valueConstructor  The constructor with which to map the result to
+     *                          a domain object.
+     * @param options           Options with which to customize the UpdateItem
+     *                          request.
+     *
+     * @returns The updated item.
+     */
+    DataMapper.prototype.executeUpdateExpression = function (expression, key, valueConstructor, options) {
+        if (options === void 0) { options = {}; }
+        return tslib_1.__awaiter(this, void 0, void 0, function () {
+            return tslib_1.__generator(this, function (_a) {
+                return [2 /*return*/, this.doExecuteUpdateExpression(expression, key, protocols_1.getSchema(valueConstructor.prototype), protocols_1.getTableName(valueConstructor.prototype), valueConstructor, options)];
+            });
+        });
+    };
+    DataMapper.prototype.doExecuteUpdateExpression = function (expression, key, schema, tableName, valueConstructor, options) {
+        if (options === void 0) { options = {}; }
+        return tslib_1.__awaiter(this, void 0, void 0, function () {
+            var req, attributes, rawResponse;
+            return tslib_1.__generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        req = {
+                            TableName: this.tableNamePrefix + tableName,
+                            ReturnValues: 'ALL_NEW',
+                            Key: dynamodb_data_marshaller_1.marshallKey(schema, key),
+                        };
+                        attributes = new dynamodb_expressions_1.ExpressionAttributes();
+                        if (options.condition) {
+                            req.ConditionExpression = dynamodb_data_marshaller_1.marshallConditionExpression(options.condition, schema, attributes).expression;
+                        }
+                        req.UpdateExpression = dynamodb_data_marshaller_1.marshallUpdateExpression(expression, schema, attributes).expression;
+                        if (Object.keys(attributes.names).length > 0) {
+                            req.ExpressionAttributeNames = attributes.names;
+                        }
+                        if (Object.keys(attributes.values).length > 0) {
+                            req.ExpressionAttributeValues = attributes.values;
+                        }
+                        return [4 /*yield*/, this.client.updateItem(req).promise()];
+                    case 1:
+                        rawResponse = _a.sent();
+                        if (rawResponse.Attributes) {
+                            return [2 /*return*/, dynamodb_data_marshaller_1.unmarshallItem(schema, rawResponse.Attributes, valueConstructor)];
+                        }
+                        // this branch should not be reached when interacting with DynamoDB, as
+                        // the ReturnValues parameter is hardcoded to 'ALL_NEW' above. It is,
+                        // however, allowed by the service model and may therefore occur in
+                        // certain unforeseen conditions; to be safe, this case should be
+                        // converted into an error unless a compelling reason to return
+                        // undefined or an empty object presents itself.
+                        throw new Error('Update operation completed successfully, but the updated value was not returned');
+                }
+            });
+        });
+    };
+    DataMapper.prototype.getTableName = function (item) {
+        return protocols_1.getTableName(item, this.tableNamePrefix);
+    };
+    DataMapper.prototype.mapGetBatch = function (items, state, options, convertedOptions) {
+        return tslib_1.__asyncGenerator(this, arguments, function mapGetBatch_1() {
+            var e_11, _a, items_4, items_4_1, item, unprefixed, tableName, schema, _b, keyProperties, itemSchemata, marshalled, e_11_1;
+            return tslib_1.__generator(this, function (_c) {
+                switch (_c.label) {
+                    case 0:
+                        _c.trys.push([0, 7, 8, 13]);
+                        items_4 = tslib_1.__asyncValues(items);
+                        _c.label = 1;
+                    case 1: return [4 /*yield*/, tslib_1.__await(items_4.next())];
+                    case 2:
+                        if (!(items_4_1 = _c.sent(), !items_4_1.done)) return [3 /*break*/, 6];
+                        item = items_4_1.value;
+                        unprefixed = protocols_1.getTableName(item);
+                        tableName = this.tableNamePrefix + unprefixed;
+                        schema = protocols_1.getSchema(item);
+                        if (unprefixed in options && !(tableName in convertedOptions)) {
+                            convertedOptions[tableName] = convertBatchGetOptions(options[unprefixed], schema);
+                        }
+                        if (!(tableName in state)) {
+                            state[tableName] = {
+                                keyProperties: getKeyProperties(schema),
+                                itemSchemata: {}
+                            };
+                        }
+                        _b = state[tableName], keyProperties = _b.keyProperties, itemSchemata = _b.itemSchemata;
+                        marshalled = dynamodb_data_marshaller_1.marshallKey(schema, item);
+                        itemSchemata[itemIdentifier(marshalled, keyProperties)] = {
+                            constructor: item.constructor,
+                            schema: schema,
+                        };
+                        return [4 /*yield*/, tslib_1.__await([tableName, marshalled])];
+                    case 3: return [4 /*yield*/, _c.sent()];
+                    case 4:
+                        _c.sent();
+                        _c.label = 5;
+                    case 5: return [3 /*break*/, 1];
+                    case 6: return [3 /*break*/, 13];
+                    case 7:
+                        e_11_1 = _c.sent();
+                        e_11 = { error: e_11_1 };
+                        return [3 /*break*/, 13];
+                    case 8:
+                        _c.trys.push([8, , 11, 12]);
+                        if (!(items_4_1 && !items_4_1.done && (_a = items_4.return))) return [3 /*break*/, 10];
+                        return [4 /*yield*/, tslib_1.__await(_a.call(items_4))];
+                    case 9:
+                        _c.sent();
+                        _c.label = 10;
+                    case 10: return [3 /*break*/, 12];
+                    case 11:
+                        if (e_11) throw e_11.error;
+                        return [7 /*endfinally*/];
+                    case 12: return [7 /*endfinally*/];
+                    case 13: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    DataMapper.prototype.mapWriteBatch = function (items, state) {
+        return tslib_1.__asyncGenerator(this, arguments, function mapWriteBatch_1() {
+            var e_12, _a, items_5, items_5_1, _b, type, item, unprefixed, tableName, schema, _c, keyProperties, itemSchemata, attributes, marshalled, e_12_1;
+            return tslib_1.__generator(this, function (_d) {
+                switch (_d.label) {
+                    case 0:
+                        _d.trys.push([0, 7, 8, 13]);
+                        items_5 = tslib_1.__asyncValues(items);
+                        _d.label = 1;
+                    case 1: return [4 /*yield*/, tslib_1.__await(items_5.next())];
+                    case 2:
+                        if (!(items_5_1 = _d.sent(), !items_5_1.done)) return [3 /*break*/, 6];
+                        _b = tslib_1.__read(items_5_1.value, 2), type = _b[0], item = _b[1];
+                        unprefixed = protocols_1.getTableName(item);
+                        tableName = this.tableNamePrefix + unprefixed;
+                        schema = protocols_1.getSchema(item);
+                        if (!(tableName in state)) {
+                            state[tableName] = {
+                                keyProperties: getKeyProperties(schema),
+                                itemSchemata: {}
+                            };
+                        }
+                        _c = state[tableName], keyProperties = _c.keyProperties, itemSchemata = _c.itemSchemata;
+                        attributes = type === 'delete'
+                            ? dynamodb_data_marshaller_1.marshallKey(schema, item)
+                            : dynamodb_data_marshaller_1.marshallItem(schema, item);
+                        marshalled = type === 'delete'
+                            ? { DeleteRequest: { Key: attributes } }
+                            : { PutRequest: { Item: attributes } };
+                        itemSchemata[itemIdentifier(attributes, keyProperties)] = {
+                            constructor: item.constructor,
+                            schema: schema,
+                        };
+                        return [4 /*yield*/, tslib_1.__await([tableName, marshalled])];
+                    case 3: return [4 /*yield*/, _d.sent()];
+                    case 4:
+                        _d.sent();
+                        _d.label = 5;
+                    case 5: return [3 /*break*/, 1];
+                    case 6: return [3 /*break*/, 13];
+                    case 7:
+                        e_12_1 = _d.sent();
+                        e_12 = { error: e_12_1 };
+                        return [3 /*break*/, 13];
+                    case 8:
+                        _d.trys.push([8, , 11, 12]);
+                        if (!(items_5_1 && !items_5_1.done && (_a = items_5.return))) return [3 /*break*/, 10];
+                        return [4 /*yield*/, tslib_1.__await(_a.call(items_5))];
+                    case 9:
+                        _d.sent();
+                        _d.label = 10;
+                    case 10: return [3 /*break*/, 12];
+                    case 11:
+                        if (e_12) throw e_12.error;
+                        return [7 /*endfinally*/];
+                    case 12: return [7 /*endfinally*/];
+                    case 13: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    return DataMapper;
+}());
+exports.DataMapper = DataMapper;
+function attributeDefinitionList(attributes) {
+    return Object.keys(attributes).map(function (name) { return ({
+        AttributeName: name,
+        AttributeType: attributes[name]
+    }); });
+}
+function convertBatchGetOptions(options, itemSchema) {
+    var out = {};
+    if (options.readConsistency === 'strong') {
+        out.ConsistentRead = true;
+    }
+    if (options.projection) {
+        var attributes = new dynamodb_expressions_1.ExpressionAttributes();
+        out.ProjectionExpression = dynamodb_expressions_1.serializeProjectionExpression(options.projection.map(function (propName) { return dynamodb_data_marshaller_1.toSchemaName(propName, options.projectionSchema || itemSchema); }), attributes);
+        out.ExpressionAttributeNames = attributes.names;
+    }
+    return out;
+}
+function getKeyProperties(schema) {
+    var e_13, _a;
+    var keys = [];
+    try {
+        for (var _b = tslib_1.__values(Object.keys(schema).sort()), _c = _b.next(); !_c.done; _c = _b.next()) {
+            var property = _c.value;
+            var fieldSchema = schema[property];
+            if (dynamodb_data_marshaller_1.isKey(fieldSchema)) {
+                keys.push(fieldSchema.attributeName || property);
+            }
+        }
+    }
+    catch (e_13_1) { e_13 = { error: e_13_1 }; }
+    finally {
+        try {
+            if (_c && !_c.done && (_a = _b.return)) _a.call(_b);
+        }
+        finally { if (e_13) throw e_13.error; }
+    }
+    return keys;
+}
+function handleVersionAttribute(attributeName, inputMember) {
+    var condition;
+    var value;
+    if (inputMember === undefined) {
+        condition = new dynamodb_expressions_1.FunctionExpression('attribute_not_exists', new dynamodb_expressions_1.AttributePath([
+            { type: 'AttributeName', name: attributeName }
+        ]));
+        value = new dynamodb_expressions_1.AttributeValue({ N: "0" });
+    }
+    else {
+        condition = {
+            type: 'Equals',
+            subject: attributeName,
+            object: inputMember,
+        };
+        value = new dynamodb_expressions_1.MathematicalExpression(new dynamodb_expressions_1.AttributePath(attributeName), '+', 1);
+    }
+    return { condition: condition, value: value };
+}
+function indexDefinitions(keys, options, schema) {
+    var e_14, _a;
+    var globalIndices = [];
+    var localIndices = [];
+    try {
+        for (var _b = tslib_1.__values(Object.keys(keys)), _c = _b.next(); !_c.done; _c = _b.next()) {
+            var IndexName = _c.value;
+            var KeySchema = keyTypesToElementList(keys[IndexName]);
+            var indexOptions = options[IndexName];
+            if (!indexOptions) {
+                throw new Error("No options provided for " + IndexName + " index");
+            }
+            var indexInfo = {
+                IndexName: IndexName,
+                KeySchema: KeySchema,
+                Projection: indexProjection(schema, indexOptions.projection),
+            };
+            if (indexOptions.type === 'local') {
+                localIndices.push(indexInfo);
+            }
+            else {
+                globalIndices.push(tslib_1.__assign({}, indexInfo, { ProvisionedThroughput: {
+                        ReadCapacityUnits: indexOptions.readCapacityUnits,
+                        WriteCapacityUnits: indexOptions.writeCapacityUnits,
+                    } }));
+            }
+        }
+    }
+    catch (e_14_1) { e_14 = { error: e_14_1 }; }
+    finally {
+        try {
+            if (_c && !_c.done && (_a = _b.return)) _a.call(_b);
+        }
+        finally { if (e_14) throw e_14.error; }
+    }
+    return {
+        GlobalSecondaryIndexes: globalIndices.length ? globalIndices : void 0,
+        LocalSecondaryIndexes: localIndices.length ? localIndices : void 0,
+    };
+}
+function indexProjection(schema, projection) {
+    if (typeof projection === 'string') {
+        return {
+            ProjectionType: projection === 'all' ? 'ALL' : 'KEYS_ONLY',
+        };
+    }
+    return {
+        ProjectionType: 'INCLUDE',
+        NonKeyAttributes: projection.map(function (propName) { return dynamodb_data_marshaller_1.getSchemaName(propName, schema); })
+    };
+}
+function isIterable(arg) {
+    return Boolean(arg) && typeof arg[Symbol.iterator] === 'function';
+}
+function isVersionAttribute(fieldSchema) {
+    return fieldSchema.type === 'Number'
+        && Boolean(fieldSchema.versionAttribute);
+}
+function itemIdentifier(marshalled, keyProperties) {
+    var e_15, _a;
+    var keyAttributes = [];
+    try {
+        for (var keyProperties_1 = tslib_1.__values(keyProperties), keyProperties_1_1 = keyProperties_1.next(); !keyProperties_1_1.done; keyProperties_1_1 = keyProperties_1.next()) {
+            var key = keyProperties_1_1.value;
+            var value = marshalled[key];
+            key + "=" + (value.B || value.N || value.S);
+        }
+    }
+    catch (e_15_1) { e_15 = { error: e_15_1 }; }
+    finally {
+        try {
+            if (keyProperties_1_1 && !keyProperties_1_1.done && (_a = keyProperties_1.return)) _a.call(keyProperties_1);
+        }
+        finally { if (e_15) throw e_15.error; }
+    }
+    return keyAttributes.join(':');
+}
+function keyTypesToElementList(keys) {
+    var elementList = Object.keys(keys).map(function (name) { return ({
+        AttributeName: name,
+        KeyType: keys[name]
+    }); });
+    elementList.sort(function (a, b) {
+        if (a.KeyType === 'HASH' && b.KeyType !== 'HASH') {
+            return -1;
+        }
+        if (a.KeyType !== 'HASH' && b.KeyType === 'HASH') {
+            return 1;
+        }
+        return 0;
+    });
+    return elementList;
+}
+//# sourceMappingURL=DataMapper.js.map
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-data-mapper/build/ItemNotFoundException.js":
+/*!**********************************************************************!*\
+  !*** ../../@aws/dynamodb-data-mapper/build/ItemNotFoundException.js ***!
+  \**********************************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var tslib_1 = __webpack_require__(/*! tslib */ "../../tslib/tslib.es6.js");
+/**
+ * An exception thrown when an item was sought with a DynamoDB::GetItem
+ * request and not found. Includes the original request sent as
+ * `itemSought`.
+ */
+var ItemNotFoundException = /** @class */ (function (_super) {
+    tslib_1.__extends(ItemNotFoundException, _super);
+    function ItemNotFoundException(itemSought, message) {
+        if (message === void 0) { message = defaultErrorMessage(itemSought); }
+        var _this = _super.call(this, message) || this;
+        _this.itemSought = itemSought;
+        _this.name = 'ItemNotFoundException';
+        return _this;
+    }
+    return ItemNotFoundException;
+}(Error));
+exports.ItemNotFoundException = ItemNotFoundException;
+function defaultErrorMessage(itemSought) {
+    return "No item with the key " + JSON.stringify(itemSought.Key) + " found in the " + itemSought.TableName + " table.";
+}
+//# sourceMappingURL=ItemNotFoundException.js.map
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-data-mapper/build/Iterator.js":
+/*!*********************************************************!*\
+  !*** ../../@aws/dynamodb-data-mapper/build/Iterator.js ***!
+  \*********************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var tslib_1 = __webpack_require__(/*! tslib */ "../../tslib/tslib.es6.js");
+__webpack_require__(/*! ./asyncIteratorSymbolPolyfill */ "../../@aws/dynamodb-data-mapper/build/asyncIteratorSymbolPolyfill.js");
+var Iterator = /** @class */ (function () {
+    function Iterator(paginator) {
+        this.paginator = paginator;
+        this._count = 0;
+        this.lastResolved = Promise.resolve();
+        this.pending = [];
+    }
+    /**
+     * @inheritDoc
+     */
+    Iterator.prototype[Symbol.asyncIterator] = function () {
+        return this;
+    };
+    /**
+     * @inheritDoc
+     */
+    Iterator.prototype.next = function () {
+        var _this = this;
+        this.lastResolved = this.lastResolved.then(function () { return _this.getNext(); });
+        return this.lastResolved;
+    };
+    /**
+     * Detaches the underlying paginator from this iterator and returns it. The
+     * paginator will yield arrays of unmarshalled items, with each yielded
+     * array corresponding to a single call to the underlying API. As with the
+     * underlying API, pages may contain a variable number of items or no items,
+     * in which case an empty array will be yielded.
+     *
+     * Calling this method will disable further iteration.
+     */
+    Iterator.prototype.pages = function () {
+        // Prevent the iterator from being used further and squelch any uncaught
+        // promise rejection warnings
+        this.lastResolved = Promise.reject(new Error('The underlying paginator has been detached from this iterator.'));
+        this.lastResolved.catch(function () { });
+        return this.paginator;
+    };
+    /**
+     * @inheritDoc
+     */
+    Iterator.prototype.return = function () {
+        // Prevent any further use of this iterator
+        this.lastResolved = Promise.reject(new Error('Iteration has been manually interrupted and may not be resumed'));
+        this.lastResolved.catch(function () { });
+        // Empty the pending queue to free up memory
+        this.pending.length = 0;
+        return this.paginator.return();
+    };
+    Object.defineProperty(Iterator.prototype, "consumedCapacity", {
+        /**
+         * Retrieve the reported capacity consumed by this iterator. Will be
+         * undefined unless returned consumed capacity is requested.
+         */
+        get: function () {
+            return this.paginator.consumedCapacity;
+        },
+        enumerable: true,
+        configurable: true
+    });
+    Object.defineProperty(Iterator.prototype, "count", {
+        /**
+         * Retrieve the number of items yielded thus far by this iterator.
+         */
+        get: function () {
+            return this._count;
+        },
+        enumerable: true,
+        configurable: true
+    });
+    Object.defineProperty(Iterator.prototype, "scannedCount", {
+        /**
+         * Retrieve the number of items scanned thus far during the execution of
+         * this iterator. This number should be the same as {@link count} unless a
+         * filter expression was used.
+         */
+        get: function () {
+            return this.paginator.scannedCount;
+        },
+        enumerable: true,
+        configurable: true
+    });
+    Iterator.prototype.getNext = function () {
+        return tslib_1.__awaiter(this, void 0, void 0, function () {
+            var _this = this;
+            return tslib_1.__generator(this, function (_a) {
+                if (this.pending.length > 0) {
+                    this.lastYielded = this.pending.shift();
+                    this._count++;
+                    return [2 /*return*/, {
+                            done: false,
+                            value: this.lastYielded
+                        }];
+                }
+                return [2 /*return*/, this.paginator.next().then(function (_a) {
+                        var _b = _a.value, value = _b === void 0 ? [] : _b, done = _a.done;
+                        var _c;
+                        if (!done) {
+                            (_c = _this.pending).push.apply(_c, tslib_1.__spread(value));
+                            return _this.getNext();
+                        }
+                        _this.lastYielded = undefined;
+                        return { done: true };
+                    })];
+            });
+        });
+    };
+    return Iterator;
+}());
+exports.Iterator = Iterator;
+//# sourceMappingURL=Iterator.js.map
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-data-mapper/build/Paginator.js":
+/*!**********************************************************!*\
+  !*** ../../@aws/dynamodb-data-mapper/build/Paginator.js ***!
+  \**********************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var tslib_1 = __webpack_require__(/*! tslib */ "../../tslib/tslib.es6.js");
+var protocols_1 = __webpack_require__(/*! ./protocols */ "../../@aws/dynamodb-data-mapper/build/protocols.js");
+var dynamodb_data_marshaller_1 = __webpack_require__(/*! @aws/dynamodb-data-marshaller */ "../../@aws/dynamodb-data-marshaller/build/index.js");
+__webpack_require__(/*! ./asyncIteratorSymbolPolyfill */ "../../@aws/dynamodb-data-mapper/build/asyncIteratorSymbolPolyfill.js");
+var Paginator = /** @class */ (function () {
+    function Paginator(paginator, valueConstructor) {
+        this.paginator = paginator;
+        this.valueConstructor = valueConstructor;
+        this.lastResolved = Promise.resolve();
+        this.itemSchema = protocols_1.getSchema(valueConstructor.prototype);
+    }
+    /**
+     * @inheritDoc
+     */
+    Paginator.prototype[Symbol.asyncIterator] = function () {
+        return this;
+    };
+    /**
+     * @inheritDoc
+     */
+    Paginator.prototype.next = function () {
+        var _this = this;
+        this.lastResolved = this.lastResolved.then(function () { return _this.getNext(); });
+        return this.lastResolved;
+    };
+    /**
+     * @inheritDoc
+     */
+    Paginator.prototype.return = function () {
+        // Prevent any further use of this iterator
+        this.lastResolved = Promise.reject(new Error('Iteration has been manually interrupted and may not be resumed'));
+        this.lastResolved.catch(function () { });
+        return this.paginator.return();
+    };
+    Object.defineProperty(Paginator.prototype, "consumedCapacity", {
+        /**
+         * Retrieve the reported capacity consumed by this paginator. Will be
+         * undefined unless returned consumed capacity is requested.
+         */
+        get: function () {
+            return this.paginator.consumedCapacity;
+        },
+        enumerable: true,
+        configurable: true
+    });
+    Object.defineProperty(Paginator.prototype, "count", {
+        /**
+         * Retrieve the number of items yielded thus far by this paginator.
+         */
+        get: function () {
+            return this.paginator.count;
+        },
+        enumerable: true,
+        configurable: true
+    });
+    Object.defineProperty(Paginator.prototype, "lastEvaluatedKey", {
+        /**
+         * Retrieve the last reported `LastEvaluatedKey`, unmarshalled according to
+         * the schema used by this paginator.
+         */
+        get: function () {
+            return this.lastKey;
+        },
+        enumerable: true,
+        configurable: true
+    });
+    Object.defineProperty(Paginator.prototype, "scannedCount", {
+        /**
+         * Retrieve the number of items scanned thus far during the execution of
+         * this paginator. This number should be the same as {@link count} unless a
+         * filter expression was used.
+         */
+        get: function () {
+            return this.paginator.scannedCount;
+        },
+        enumerable: true,
+        configurable: true
+    });
+    Paginator.prototype.getNext = function () {
+        return tslib_1.__awaiter(this, void 0, void 0, function () {
+            var _this = this;
+            return tslib_1.__generator(this, function (_a) {
+                return [2 /*return*/, this.paginator.next().then(function (_a) {
+                        var _b = _a.value, value = _b === void 0 ? {} : _b, done = _a.done;
+                        if (!done) {
+                            _this.lastKey = value.LastEvaluatedKey && dynamodb_data_marshaller_1.unmarshallItem(_this.itemSchema, value.LastEvaluatedKey, _this.valueConstructor);
+                            return {
+                                value: (value.Items || []).map(function (item) { return dynamodb_data_marshaller_1.unmarshallItem(_this.itemSchema, item, _this.valueConstructor); }),
+                                done: false
+                            };
+                        }
+                        return { done: true };
+                    })];
+            });
+        });
+    };
+    return Paginator;
+}());
+exports.Paginator = Paginator;
+//# sourceMappingURL=Paginator.js.map
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-data-mapper/build/ParallelScanIterator.js":
+/*!*********************************************************************!*\
+  !*** ../../@aws/dynamodb-data-mapper/build/ParallelScanIterator.js ***!
+  \*********************************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var tslib_1 = __webpack_require__(/*! tslib */ "../../tslib/tslib.es6.js");
+var Iterator_1 = __webpack_require__(/*! ./Iterator */ "../../@aws/dynamodb-data-mapper/build/Iterator.js");
+var ParallelScanPaginator_1 = __webpack_require__(/*! ./ParallelScanPaginator */ "../../@aws/dynamodb-data-mapper/build/ParallelScanPaginator.js");
+/**
+ * Iterates over each item returned by a parallel DynamoDB scan until no more
+ * pages are available.
+ */
+var ParallelScanIterator = /** @class */ (function (_super) {
+    tslib_1.__extends(ParallelScanIterator, _super);
+    function ParallelScanIterator(client, itemConstructor, segments, options) {
+        if (options === void 0) { options = {}; }
+        return _super.call(this, new ParallelScanPaginator_1.ParallelScanPaginator(client, itemConstructor, segments, options)) || this;
+    }
+    return ParallelScanIterator;
+}(Iterator_1.Iterator));
+exports.ParallelScanIterator = ParallelScanIterator;
+//# sourceMappingURL=ParallelScanIterator.js.map
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-data-mapper/build/ParallelScanPaginator.js":
+/*!**********************************************************************!*\
+  !*** ../../@aws/dynamodb-data-mapper/build/ParallelScanPaginator.js ***!
+  \**********************************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var tslib_1 = __webpack_require__(/*! tslib */ "../../tslib/tslib.es6.js");
+var buildScanInput_1 = __webpack_require__(/*! ./buildScanInput */ "../../@aws/dynamodb-data-mapper/build/buildScanInput.js");
+var Paginator_1 = __webpack_require__(/*! ./Paginator */ "../../@aws/dynamodb-data-mapper/build/Paginator.js");
+var protocols_1 = __webpack_require__(/*! ./protocols */ "../../@aws/dynamodb-data-mapper/build/protocols.js");
+var dynamodb_query_iterator_1 = __webpack_require__(/*! @aws/dynamodb-query-iterator */ "../../@aws/dynamodb-query-iterator/build/index.js");
+var dynamodb_data_marshaller_1 = __webpack_require__(/*! @aws/dynamodb-data-marshaller */ "../../@aws/dynamodb-data-marshaller/build/index.js");
+/**
+ * Iterates over each page of items returned by a parallel DynamoDB scan until
+ * no more pages are available.
+ */
+var ParallelScanPaginator = /** @class */ (function (_super) {
+    tslib_1.__extends(ParallelScanPaginator, _super);
+    function ParallelScanPaginator(client, itemConstructor, segments, options) {
+        if (options === void 0) { options = {}; }
+        var _this = this;
+        var schema = protocols_1.getSchema(itemConstructor.prototype);
+        var input = tslib_1.__assign({}, buildScanInput_1.buildScanInput(itemConstructor, options), { TotalSegments: segments, ExclusiveStartKey: undefined, Segment: undefined });
+        var scanState;
+        if (options.scanState) {
+            scanState = options.scanState.map(function (_a) {
+                var initialized = _a.initialized, lastKey = _a.lastEvaluatedKey;
+                return ({
+                    initialized: initialized,
+                    LastEvaluatedKey: lastKey
+                        ? dynamodb_data_marshaller_1.marshallKey(schema, lastKey, options.indexName)
+                        : undefined
+                });
+            });
+        }
+        var paginator = new dynamodb_query_iterator_1.ParallelScanPaginator(client, input, scanState);
+        _this = _super.call(this, paginator, itemConstructor) || this;
+        _this._paginator = paginator;
+        _this._ctor = itemConstructor;
+        _this._schema = schema;
+        return _this;
+    }
+    Object.defineProperty(ParallelScanPaginator.prototype, "lastEvaluatedKey", {
+        /**
+         * The `lastEvaluatedKey` attribute is not available on parallel scans. Use
+         * {@link scanState} instead.
+         */
+        get: function () {
+            return undefined;
+        },
+        enumerable: true,
+        configurable: true
+    });
+    Object.defineProperty(ParallelScanPaginator.prototype, "scanState", {
+        /**
+         * A snapshot of the current state of a parallel scan. May be used to resume
+         * a parallel scan with a separate paginator.
+         */
+        get: function () {
+            var _this = this;
+            return this._paginator.scanState.map(function (_a) {
+                var initialized = _a.initialized, LastEvaluatedKey = _a.LastEvaluatedKey;
+                return ({
+                    initialized: initialized,
+                    lastEvaluatedKey: LastEvaluatedKey
+                        ? dynamodb_data_marshaller_1.unmarshallItem(_this._schema, LastEvaluatedKey, _this._ctor)
+                        : undefined
+                });
+            });
+        },
+        enumerable: true,
+        configurable: true
+    });
+    return ParallelScanPaginator;
+}(Paginator_1.Paginator));
+exports.ParallelScanPaginator = ParallelScanPaginator;
+//# sourceMappingURL=ParallelScanPaginator.js.map
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-data-mapper/build/QueryIterator.js":
+/*!**************************************************************!*\
+  !*** ../../@aws/dynamodb-data-mapper/build/QueryIterator.js ***!
+  \**************************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var tslib_1 = __webpack_require__(/*! tslib */ "../../tslib/tslib.es6.js");
+var Iterator_1 = __webpack_require__(/*! ./Iterator */ "../../@aws/dynamodb-data-mapper/build/Iterator.js");
+var QueryPaginator_1 = __webpack_require__(/*! ./QueryPaginator */ "../../@aws/dynamodb-data-mapper/build/QueryPaginator.js");
+/**
+ * Iterates over each item returned by a DynamoDB query until no more pages are
+ * available.
+ */
+var QueryIterator = /** @class */ (function (_super) {
+    tslib_1.__extends(QueryIterator, _super);
+    function QueryIterator(client, valueConstructor, keyCondition, options) {
+        return _super.call(this, new QueryPaginator_1.QueryPaginator(client, valueConstructor, keyCondition, options)) || this;
+    }
+    return QueryIterator;
+}(Iterator_1.Iterator));
+exports.QueryIterator = QueryIterator;
+//# sourceMappingURL=QueryIterator.js.map
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-data-mapper/build/QueryPaginator.js":
+/*!***************************************************************!*\
+  !*** ../../@aws/dynamodb-data-mapper/build/QueryPaginator.js ***!
+  \***************************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var tslib_1 = __webpack_require__(/*! tslib */ "../../tslib/tslib.es6.js");
+var marshallStartKey_1 = __webpack_require__(/*! ./marshallStartKey */ "../../@aws/dynamodb-data-mapper/build/marshallStartKey.js");
+var Paginator_1 = __webpack_require__(/*! ./Paginator */ "../../@aws/dynamodb-data-mapper/build/Paginator.js");
+var protocols_1 = __webpack_require__(/*! ./protocols */ "../../@aws/dynamodb-data-mapper/build/protocols.js");
+var dynamodb_query_iterator_1 = __webpack_require__(/*! @aws/dynamodb-query-iterator */ "../../@aws/dynamodb-query-iterator/build/index.js");
+var dynamodb_data_marshaller_1 = __webpack_require__(/*! @aws/dynamodb-data-marshaller */ "../../@aws/dynamodb-data-marshaller/build/index.js");
+var dynamodb_expressions_1 = __webpack_require__(/*! @aws/dynamodb-expressions */ "../../@aws/dynamodb-expressions/build/index.js");
+/**
+ * Iterates over each page of items returned by a DynamoDB query until no more
+ * pages are available.
+ */
+var QueryPaginator = /** @class */ (function (_super) {
+    tslib_1.__extends(QueryPaginator, _super);
+    function QueryPaginator(client, valueConstructor, keyCondition, options) {
+        if (options === void 0) { options = {}; }
+        var _this = this;
+        var itemSchema = protocols_1.getSchema(valueConstructor.prototype);
+        var filter = options.filter, indexName = options.indexName, limit = options.limit, pageSize = options.pageSize, projection = options.projection, readConsistency = options.readConsistency, scanIndexForward = options.scanIndexForward, startKey = options.startKey, prefix = options.tableNamePrefix;
+        var req = {
+            TableName: protocols_1.getTableName(valueConstructor.prototype, prefix),
+            ScanIndexForward: scanIndexForward,
+            Limit: pageSize,
+            IndexName: indexName,
+        };
+        if (readConsistency === 'strong') {
+            req.ConsistentRead = true;
+        }
+        var attributes = new dynamodb_expressions_1.ExpressionAttributes();
+        req.KeyConditionExpression = dynamodb_data_marshaller_1.marshallConditionExpression(normalizeKeyCondition(keyCondition), itemSchema, attributes).expression;
+        if (filter) {
+            req.FilterExpression = dynamodb_data_marshaller_1.marshallConditionExpression(filter, itemSchema, attributes).expression;
+        }
+        if (projection) {
+            req.ProjectionExpression = dynamodb_data_marshaller_1.marshallProjectionExpression(projection, itemSchema, attributes).expression;
+        }
+        if (Object.keys(attributes.names).length > 0) {
+            req.ExpressionAttributeNames = attributes.names;
+        }
+        if (Object.keys(attributes.values).length > 0) {
+            req.ExpressionAttributeValues = attributes.values;
+        }
+        if (startKey) {
+            req.ExclusiveStartKey = marshallStartKey_1.marshallStartKey(itemSchema, startKey);
+        }
+        _this = _super.call(this, new dynamodb_query_iterator_1.QueryPaginator(client, req, limit), valueConstructor) || this;
+        return _this;
+    }
+    return QueryPaginator;
+}(Paginator_1.Paginator));
+exports.QueryPaginator = QueryPaginator;
+function normalizeKeyCondition(keyCondition) {
+    var e_1, _a;
+    if (dynamodb_expressions_1.isConditionExpression(keyCondition)) {
+        return keyCondition;
+    }
+    var conditions = [];
+    try {
+        for (var _b = tslib_1.__values(Object.keys(keyCondition)), _c = _b.next(); !_c.done; _c = _b.next()) {
+            var property = _c.value;
+            var predicate = keyCondition[property];
+            if (dynamodb_expressions_1.isConditionExpressionPredicate(predicate)) {
+                conditions.push(tslib_1.__assign({}, predicate, { subject: property }));
+            }
+            else {
+                conditions.push({
+                    type: 'Equals',
+                    subject: property,
+                    object: predicate,
+                });
+            }
+        }
+    }
+    catch (e_1_1) { e_1 = { error: e_1_1 }; }
+    finally {
+        try {
+            if (_c && !_c.done && (_a = _b.return)) _a.call(_b);
+        }
+        finally { if (e_1) throw e_1.error; }
+    }
+    if (conditions.length === 1) {
+        return conditions[0];
+    }
+    return { type: 'And', conditions: conditions };
+}
+//# sourceMappingURL=QueryPaginator.js.map
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-data-mapper/build/ScanIterator.js":
+/*!*************************************************************!*\
+  !*** ../../@aws/dynamodb-data-mapper/build/ScanIterator.js ***!
+  \*************************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var tslib_1 = __webpack_require__(/*! tslib */ "../../tslib/tslib.es6.js");
+var Iterator_1 = __webpack_require__(/*! ./Iterator */ "../../@aws/dynamodb-data-mapper/build/Iterator.js");
+var ScanPaginator_1 = __webpack_require__(/*! ./ScanPaginator */ "../../@aws/dynamodb-data-mapper/build/ScanPaginator.js");
+/**
+ * Iterates over each item returned by a DynamoDB scan until no more pages are
+ * available.
+ */
+var ScanIterator = /** @class */ (function (_super) {
+    tslib_1.__extends(ScanIterator, _super);
+    function ScanIterator(client, valueConstructor, options) {
+        return _super.call(this, new ScanPaginator_1.ScanPaginator(client, valueConstructor, options)) || this;
+    }
+    return ScanIterator;
+}(Iterator_1.Iterator));
+exports.ScanIterator = ScanIterator;
+//# sourceMappingURL=ScanIterator.js.map
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-data-mapper/build/ScanPaginator.js":
+/*!**************************************************************!*\
+  !*** ../../@aws/dynamodb-data-mapper/build/ScanPaginator.js ***!
+  \**************************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var tslib_1 = __webpack_require__(/*! tslib */ "../../tslib/tslib.es6.js");
+var buildScanInput_1 = __webpack_require__(/*! ./buildScanInput */ "../../@aws/dynamodb-data-mapper/build/buildScanInput.js");
+var Paginator_1 = __webpack_require__(/*! ./Paginator */ "../../@aws/dynamodb-data-mapper/build/Paginator.js");
+var dynamodb_query_iterator_1 = __webpack_require__(/*! @aws/dynamodb-query-iterator */ "../../@aws/dynamodb-query-iterator/build/index.js");
+/**
+ * Iterates over each page of items returned by a DynamoDB scan until no more
+ * pages are available.
+ */
+var ScanPaginator = /** @class */ (function (_super) {
+    tslib_1.__extends(ScanPaginator, _super);
+    function ScanPaginator(client, itemConstructor, options) {
+        if (options === void 0) { options = {}; }
+        return _super.call(this, new dynamodb_query_iterator_1.ScanPaginator(client, buildScanInput_1.buildScanInput(itemConstructor, options), options.limit), itemConstructor) || this;
+    }
+    return ScanPaginator;
+}(Paginator_1.Paginator));
+exports.ScanPaginator = ScanPaginator;
+//# sourceMappingURL=ScanPaginator.js.map
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-data-mapper/build/asyncIteratorSymbolPolyfill.js":
+/*!****************************************************************************!*\
+  !*** ../../@aws/dynamodb-data-mapper/build/asyncIteratorSymbolPolyfill.js ***!
+  \****************************************************************************/
+/***/ (() => {
+
+"use strict";
+
+/**
+ * Provides a simple polyfill for runtime environments that provide a Symbol
+ * implementation but do not have Symbol.asyncIterator available by default.
+ */
+if (Symbol && !Symbol.asyncIterator) {
+    Symbol.asyncIterator = Symbol.for("__@@asyncIterator__");
+}
+//# sourceMappingURL=asyncIteratorSymbolPolyfill.js.map
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-data-mapper/build/buildScanInput.js":
+/*!***************************************************************!*\
+  !*** ../../@aws/dynamodb-data-mapper/build/buildScanInput.js ***!
+  \***************************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var marshallStartKey_1 = __webpack_require__(/*! ./marshallStartKey */ "../../@aws/dynamodb-data-mapper/build/marshallStartKey.js");
+var protocols_1 = __webpack_require__(/*! ./protocols */ "../../@aws/dynamodb-data-mapper/build/protocols.js");
+var dynamodb_data_marshaller_1 = __webpack_require__(/*! @aws/dynamodb-data-marshaller */ "../../@aws/dynamodb-data-marshaller/build/index.js");
+var dynamodb_expressions_1 = __webpack_require__(/*! @aws/dynamodb-expressions */ "../../@aws/dynamodb-expressions/build/index.js");
+/**
+ * @internal
+ */
+function buildScanInput(valueConstructor, options) {
+    if (options === void 0) { options = {}; }
+    var filter = options.filter, indexName = options.indexName, pageSize = options.pageSize, projection = options.projection, readConsistency = options.readConsistency, segment = options.segment, startKey = options.startKey, prefix = options.tableNamePrefix, totalSegments = options.totalSegments;
+    var req = {
+        TableName: protocols_1.getTableName(valueConstructor.prototype, prefix),
+        Limit: pageSize,
+        IndexName: indexName,
+        Segment: segment,
+        TotalSegments: totalSegments,
+    };
+    if (readConsistency === 'strong') {
+        req.ConsistentRead = true;
+    }
+    var schema = protocols_1.getSchema(valueConstructor.prototype);
+    var attributes = new dynamodb_expressions_1.ExpressionAttributes();
+    if (filter) {
+        req.FilterExpression = dynamodb_data_marshaller_1.marshallConditionExpression(filter, schema, attributes).expression;
+    }
+    if (projection) {
+        req.ProjectionExpression = dynamodb_data_marshaller_1.marshallProjectionExpression(projection, schema, attributes).expression;
+    }
+    if (Object.keys(attributes.names).length > 0) {
+        req.ExpressionAttributeNames = attributes.names;
+    }
+    if (Object.keys(attributes.values).length > 0) {
+        req.ExpressionAttributeValues = attributes.values;
+    }
+    if (startKey) {
+        req.ExclusiveStartKey = marshallStartKey_1.marshallStartKey(schema, startKey);
+    }
+    return req;
+}
+exports.buildScanInput = buildScanInput;
+//# sourceMappingURL=buildScanInput.js.map
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-data-mapper/build/constants.js":
+/*!**********************************************************!*\
+  !*** ../../@aws/dynamodb-data-mapper/build/constants.js ***!
+  \**********************************************************/
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.VERSION = '0.4.0';
+exports.MAX_WRITE_BATCH_SIZE = 25;
+exports.MAX_READ_BATCH_SIZE = 100;
+//# sourceMappingURL=constants.js.map
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-data-mapper/build/embed.js":
+/*!******************************************************!*\
+  !*** ../../@aws/dynamodb-data-mapper/build/embed.js ***!
+  \******************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var protocols_1 = __webpack_require__(/*! ./protocols */ "../../@aws/dynamodb-data-mapper/build/protocols.js");
+function embed(documentConstructor, _a) {
+    var _b = _a === void 0 ? {} : _a, attributeName = _b.attributeName, defaultProvider = _b.defaultProvider;
+    return {
+        type: 'Document',
+        members: documentConstructor.prototype[protocols_1.DynamoDbSchema] || {},
+        attributeName: attributeName,
+        defaultProvider: defaultProvider,
+        valueConstructor: documentConstructor
+    };
+}
+exports.embed = embed;
+//# sourceMappingURL=embed.js.map
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-data-mapper/build/index.js":
+/*!******************************************************!*\
+  !*** ../../@aws/dynamodb-data-mapper/build/index.js ***!
+  \******************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var tslib_1 = __webpack_require__(/*! tslib */ "../../tslib/tslib.es6.js");
+tslib_1.__exportStar(__webpack_require__(/*! ./constants */ "../../@aws/dynamodb-data-mapper/build/constants.js"), exports);
+tslib_1.__exportStar(__webpack_require__(/*! ./DataMapper */ "../../@aws/dynamodb-data-mapper/build/DataMapper.js"), exports);
+tslib_1.__exportStar(__webpack_require__(/*! ./embed */ "../../@aws/dynamodb-data-mapper/build/embed.js"), exports);
+tslib_1.__exportStar(__webpack_require__(/*! ./ItemNotFoundException */ "../../@aws/dynamodb-data-mapper/build/ItemNotFoundException.js"), exports);
+tslib_1.__exportStar(__webpack_require__(/*! ./ParallelScanIterator */ "../../@aws/dynamodb-data-mapper/build/ParallelScanIterator.js"), exports);
+tslib_1.__exportStar(__webpack_require__(/*! ./ParallelScanPaginator */ "../../@aws/dynamodb-data-mapper/build/ParallelScanPaginator.js"), exports);
+tslib_1.__exportStar(__webpack_require__(/*! ./protocols */ "../../@aws/dynamodb-data-mapper/build/protocols.js"), exports);
+tslib_1.__exportStar(__webpack_require__(/*! ./QueryIterator */ "../../@aws/dynamodb-data-mapper/build/QueryIterator.js"), exports);
+tslib_1.__exportStar(__webpack_require__(/*! ./QueryPaginator */ "../../@aws/dynamodb-data-mapper/build/QueryPaginator.js"), exports);
+tslib_1.__exportStar(__webpack_require__(/*! ./ScanIterator */ "../../@aws/dynamodb-data-mapper/build/ScanIterator.js"), exports);
+tslib_1.__exportStar(__webpack_require__(/*! ./ScanPaginator */ "../../@aws/dynamodb-data-mapper/build/ScanPaginator.js"), exports);
+//# sourceMappingURL=index.js.map
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-data-mapper/build/marshallStartKey.js":
+/*!*****************************************************************!*\
+  !*** ../../@aws/dynamodb-data-mapper/build/marshallStartKey.js ***!
+  \*****************************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var tslib_1 = __webpack_require__(/*! tslib */ "../../tslib/tslib.es6.js");
+var dynamodb_data_marshaller_1 = __webpack_require__(/*! @aws/dynamodb-data-marshaller */ "../../@aws/dynamodb-data-marshaller/build/index.js");
+/**
+ * @internal
+ */
+function marshallStartKey(schema, startKey) {
+    var e_1, _a;
+    var key = {};
+    try {
+        for (var _b = tslib_1.__values(Object.keys(startKey)), _c = _b.next(); !_c.done; _c = _b.next()) {
+            var propertyName = _c.value;
+            var propSchema = schema[propertyName];
+            var _d = propSchema.attributeName, attributeName = _d === void 0 ? propertyName : _d;
+            if (propSchema) {
+                key[attributeName] = dynamodb_data_marshaller_1.marshallValue(propSchema, startKey[propertyName]);
+            }
+        }
+    }
+    catch (e_1_1) { e_1 = { error: e_1_1 }; }
+    finally {
+        try {
+            if (_c && !_c.done && (_a = _b.return)) _a.call(_b);
+        }
+        finally { if (e_1) throw e_1.error; }
+    }
+    return key;
+}
+exports.marshallStartKey = marshallStartKey;
+//# sourceMappingURL=marshallStartKey.js.map
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-data-mapper/build/protocols.js":
+/*!**********************************************************!*\
+  !*** ../../@aws/dynamodb-data-mapper/build/protocols.js ***!
+  \**********************************************************/
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+/**
+ * Table metadata is reported by items submitted to the data mapper via methods
+ * identified by symbols. This is done both to disambiguate data (which should
+ * always be identified by string keys) from metadata and also to allow an
+ * eventually integration with the First-Class Protocols proposal as described
+ * at {@link https://github.com/michaelficarra/proposal-first-class-protocols}
+ * (currently at stage 1 in the ECMAScript change acceptance process).
+ *
+ * Because the protocol proposal allows implementation to be declared
+ * dynamically at runtime (and also because TypeScript does not allow
+ * user-defined symbols to appear in type declarations), protocol adherence
+ * should be detected on objects at runtime rather than on types via static
+ * analysis.
+ */
+/**
+ * Used to designate the mapping of an object from its JavaScript form to its
+ * representation in a DynamoDB Table or nested map.
+ *
+ * @example
+ *
+ *      class FooDocument {
+ *          [DynamoDbSchema]() {
+ *              return {
+ *                  bar: {type: 'String'},
+ *                  baz: {type: 'Number'},
+ *              };
+ *          }
+ *      }
+ */
+exports.DynamoDbSchema = Symbol('DynamoDbSchema');
+function getSchema(item) {
+    if (item) {
+        var schema = item[exports.DynamoDbSchema];
+        if (schema && typeof schema === 'object') {
+            return schema;
+        }
+    }
+    throw new Error('The provided item did not adhere to the DynamoDbDocument protocol.' +
+        ' No object property was found at the `DynamoDbSchema` symbol');
+}
+exports.getSchema = getSchema;
+/**
+ * Used to designate that an object represents a row of the named DynamoDB
+ * table. Meant to be used in conjunction with {DynamoDbSchema}.
+ *
+ * @example
+ *
+ *      class FooDocument {
+ *          [DynamoDbTable]() {
+ *              return 'FooTable';
+ *          }
+ *
+ *          [DynamoDbSchema]() {
+ *              return {
+ *                  bar: {type: 'String'},
+ *                  baz: {type: 'Number'},
+ *              };
+ *          }
+ *      }
+ */
+exports.DynamoDbTable = Symbol('DynamoDbTableName');
+function getTableName(item, tableNamePrefix) {
+    if (tableNamePrefix === void 0) { tableNamePrefix = ''; }
+    if (item) {
+        var tableName = item[exports.DynamoDbTable];
+        if (typeof tableName === 'string') {
+            return tableNamePrefix + tableName;
+        }
+    }
+    throw new Error('The provided item did not adhere to the DynamoDbTable protocol. No' +
+        ' string property was found at the `DynamoDbTable` symbol');
+}
+exports.getTableName = getTableName;
+/**
+ * Used to designate which fields on an object have been changed. The method
+ * identified by this symbol should return a iterable that enumerates the fields
+ * that have been altered.
+ *
+ * @example
+ *
+ *      class FooDocument {
+ *          constructor() {
+ *              this._dirtyFields = new Set();
+ *              this._foo = '';
+ *          }
+ *
+ *          get foo() {
+ *              return this._foo;
+ *          }
+ *
+ *          set foo(value) {
+ *              this._foo = value;
+ *              this._dirtyFields.add('foo');
+ *          }
+ *
+ *          [DynamoDbDirtyFields]() {
+ *              return this._dirtyFields.values();
+ *          }
+ *      }
+ */
+exports.DynamoDbDirtyFields = Symbol('DynamoDbDirtyFields');
+//# sourceMappingURL=protocols.js.map
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-data-marshaller/build/InvalidSchemaError.js":
+/*!***********************************************************************!*\
+  !*** ../../@aws/dynamodb-data-marshaller/build/InvalidSchemaError.js ***!
+  \***********************************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var tslib_1 = __webpack_require__(/*! tslib */ "../../tslib/tslib.es6.js");
+/**
+ * An error thrown when a marshaller or unmarshaller cannot understand a node of
+ * the provided schema.
+ */
+var InvalidSchemaError = /** @class */ (function (_super) {
+    tslib_1.__extends(InvalidSchemaError, _super);
+    function InvalidSchemaError(node, message) {
+        var _this = _super.call(this, message) || this;
+        _this.node = node;
+        return _this;
+    }
+    return InvalidSchemaError;
+}(Error));
+exports.InvalidSchemaError = InvalidSchemaError;
+//# sourceMappingURL=InvalidSchemaError.js.map
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-data-marshaller/build/InvalidValueError.js":
+/*!**********************************************************************!*\
+  !*** ../../@aws/dynamodb-data-marshaller/build/InvalidValueError.js ***!
+  \**********************************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var tslib_1 = __webpack_require__(/*! tslib */ "../../tslib/tslib.es6.js");
+/**
+ * An error thrown by the marshaller when a node of the provided input cannot be
+ * marshalled into the type specified in the schema.
+ */
+var InvalidValueError = /** @class */ (function (_super) {
+    tslib_1.__extends(InvalidValueError, _super);
+    function InvalidValueError(invalidValue, message) {
+        var _this = _super.call(this, message) || this;
+        _this.invalidValue = invalidValue;
+        return _this;
+    }
+    return InvalidValueError;
+}(Error));
+exports.InvalidValueError = InvalidValueError;
+//# sourceMappingURL=InvalidValueError.js.map
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-data-marshaller/build/Schema.js":
+/*!***********************************************************!*\
+  !*** ../../@aws/dynamodb-data-marshaller/build/Schema.js ***!
+  \***********************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var tslib_1 = __webpack_require__(/*! tslib */ "../../tslib/tslib.es6.js");
+var SchemaType_1 = __webpack_require__(/*! ./SchemaType */ "../../@aws/dynamodb-data-marshaller/build/SchemaType.js");
+/**
+ * Evaluates whether the provided argument is a Schema object
+ */
+function isSchema(arg) {
+    var e_1, _a;
+    if (!Boolean(arg) || typeof arg !== 'object') {
+        return false;
+    }
+    try {
+        for (var _b = tslib_1.__values(Object.keys(arg)), _c = _b.next(); !_c.done; _c = _b.next()) {
+            var key = _c.value;
+            if (!SchemaType_1.isSchemaType(arg[key])) {
+                return false;
+            }
+        }
+    }
+    catch (e_1_1) { e_1 = { error: e_1_1 }; }
+    finally {
+        try {
+            if (_c && !_c.done && (_a = _b.return)) _a.call(_b);
+        }
+        finally { if (e_1) throw e_1.error; }
+    }
+    return true;
+}
+exports.isSchema = isSchema;
+//# sourceMappingURL=Schema.js.map
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-data-marshaller/build/SchemaType.js":
+/*!***************************************************************!*\
+  !*** ../../@aws/dynamodb-data-marshaller/build/SchemaType.js ***!
+  \***************************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var tslib_1 = __webpack_require__(/*! tslib */ "../../tslib/tslib.es6.js");
+/**
+ * The enumeration of types supported by this marshaller package.
+ */
+exports.TypeTags = {
+    Any: 'Any',
+    Binary: 'Binary',
+    Boolean: 'Boolean',
+    Collection: 'Collection',
+    Custom: 'Custom',
+    Date: 'Date',
+    Document: 'Document',
+    Hash: 'Hash',
+    List: 'List',
+    Map: 'Map',
+    Null: 'Null',
+    Number: 'Number',
+    Set: 'Set',
+    String: 'String',
+    Tuple: 'Tuple',
+};
+function isBaseType(arg) {
+    return Boolean(arg) && typeof arg === 'object'
+        && typeof arg.type === 'string'
+        && arg.type in exports.TypeTags
+        && ['string', 'undefined'].indexOf(typeof arg.attributeName) > -1;
+}
+/**
+ * The types of keys a given attribute can represent.
+ */
+exports.KeyTypes = {
+    HASH: 'HASH',
+    RANGE: 'RANGE',
+};
+function isKeyableType(arg) {
+    var e_1, _a;
+    var _b = arg, keyType = _b.keyType, indexKeyConfigurations = _b.indexKeyConfigurations;
+    if (!(keyType === undefined || keyType in exports.KeyTypes)) {
+        return false;
+    }
+    var idxKeysType = typeof indexKeyConfigurations;
+    if (indexKeyConfigurations && idxKeysType === 'object') {
+        try {
+            for (var _c = tslib_1.__values(Object.keys(indexKeyConfigurations)), _d = _c.next(); !_d.done; _d = _c.next()) {
+                var indexName = _d.value;
+                if (!(indexKeyConfigurations[indexName] in exports.KeyTypes)) {
+                    return false;
+                }
+            }
+        }
+        catch (e_1_1) { e_1 = { error: e_1_1 }; }
+        finally {
+            try {
+                if (_d && !_d.done && (_a = _c.return)) _a.call(_c);
+            }
+            finally { if (e_1) throw e_1.error; }
+        }
+        return true;
+    }
+    return idxKeysType === 'undefined';
+}
+function isSchemaType(arg, alreadyVisited) {
+    if (alreadyVisited === void 0) { alreadyVisited = new Set(); }
+    if (isBaseType(arg)) {
+        if (alreadyVisited.has(arg)) {
+            return true;
+        }
+        alreadyVisited.add(arg);
+        switch (arg.type) {
+            case 'Binary':
+            case 'Date':
+            case 'String':
+                return isKeyableType(arg);
+            case 'Custom':
+                return isKeyableType(arg)
+                    && typeof arg.marshall === 'function'
+                    && typeof arg.unmarshall === 'function'
+                    && [
+                        void 0,
+                        'S',
+                        'N',
+                        'B',
+                    ].indexOf(arg.attributeType) > -1;
+            case 'Document':
+                return isDocumentType(arg, alreadyVisited);
+            case 'List':
+            case 'Map':
+                return isSchemaType(arg.memberType, alreadyVisited);
+            case 'Number':
+                return isKeyableType(arg) && ['boolean', 'undefined']
+                    .indexOf(typeof arg.versionAttribute) > -1;
+            case 'Tuple':
+                return isTupleType(arg, alreadyVisited);
+            default:
+                return true;
+        }
+    }
+    return false;
+}
+exports.isSchemaType = isSchemaType;
+function isDocumentType(arg, alreadyVisited) {
+    var e_2, _a;
+    var _b = arg, valueConstructor = _b.valueConstructor, members = _b.members;
+    if (!members || typeof members !== 'object') {
+        return false;
+    }
+    try {
+        for (var _c = tslib_1.__values(Object.keys(members)), _d = _c.next(); !_d.done; _d = _c.next()) {
+            var key = _d.value;
+            if (!isSchemaType(members[key], alreadyVisited)) {
+                return false;
+            }
+        }
+    }
+    catch (e_2_1) { e_2 = { error: e_2_1 }; }
+    finally {
+        try {
+            if (_d && !_d.done && (_a = _c.return)) _a.call(_c);
+        }
+        finally { if (e_2) throw e_2.error; }
+    }
+    return ['function', 'undefined',].indexOf(typeof valueConstructor) > -1;
+}
+function isTupleType(arg, alreadyVisited) {
+    var e_3, _a;
+    var members = arg.members;
+    if (!Array.isArray(members)) {
+        return false;
+    }
+    try {
+        for (var members_1 = tslib_1.__values(members), members_1_1 = members_1.next(); !members_1_1.done; members_1_1 = members_1.next()) {
+            var member = members_1_1.value;
+            if (!isSchemaType(member, alreadyVisited)) {
+                return false;
+            }
+        }
+    }
+    catch (e_3_1) { e_3 = { error: e_3_1 }; }
+    finally {
+        try {
+            if (members_1_1 && !members_1_1.done && (_a = members_1.return)) _a.call(members_1);
+        }
+        finally { if (e_3) throw e_3.error; }
+    }
+    return true;
+}
+//# sourceMappingURL=SchemaType.js.map
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-data-marshaller/build/index.js":
+/*!**********************************************************!*\
+  !*** ../../@aws/dynamodb-data-marshaller/build/index.js ***!
+  \**********************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var tslib_1 = __webpack_require__(/*! tslib */ "../../tslib/tslib.es6.js");
+tslib_1.__exportStar(__webpack_require__(/*! ./InvalidSchemaError */ "../../@aws/dynamodb-data-marshaller/build/InvalidSchemaError.js"), exports);
+tslib_1.__exportStar(__webpack_require__(/*! ./InvalidValueError */ "../../@aws/dynamodb-data-marshaller/build/InvalidValueError.js"), exports);
+tslib_1.__exportStar(__webpack_require__(/*! ./isKey */ "../../@aws/dynamodb-data-marshaller/build/isKey.js"), exports);
+tslib_1.__exportStar(__webpack_require__(/*! ./keysFromSchema */ "../../@aws/dynamodb-data-marshaller/build/keysFromSchema.js"), exports);
+tslib_1.__exportStar(__webpack_require__(/*! ./marshallExpression */ "../../@aws/dynamodb-data-marshaller/build/marshallExpression.js"), exports);
+tslib_1.__exportStar(__webpack_require__(/*! ./marshallItem */ "../../@aws/dynamodb-data-marshaller/build/marshallItem.js"), exports);
+tslib_1.__exportStar(__webpack_require__(/*! ./marshallKey */ "../../@aws/dynamodb-data-marshaller/build/marshallKey.js"), exports);
+tslib_1.__exportStar(__webpack_require__(/*! ./Schema */ "../../@aws/dynamodb-data-marshaller/build/Schema.js"), exports);
+tslib_1.__exportStar(__webpack_require__(/*! ./SchemaType */ "../../@aws/dynamodb-data-marshaller/build/SchemaType.js"), exports);
+tslib_1.__exportStar(__webpack_require__(/*! ./toSchemaName */ "../../@aws/dynamodb-data-marshaller/build/toSchemaName.js"), exports);
+tslib_1.__exportStar(__webpack_require__(/*! ./unmarshallItem */ "../../@aws/dynamodb-data-marshaller/build/unmarshallItem.js"), exports);
+//# sourceMappingURL=index.js.map
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-data-marshaller/build/isKey.js":
+/*!**********************************************************!*\
+  !*** ../../@aws/dynamodb-data-marshaller/build/isKey.js ***!
+  \**********************************************************/
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+function isKey(fieldSchema, indexName) {
+    if (fieldSchema.type === 'Binary' ||
+        fieldSchema.type === 'Custom' ||
+        fieldSchema.type === 'Date' ||
+        fieldSchema.type === 'Number' ||
+        fieldSchema.type === 'String') {
+        return indexName !== undefined
+            ? Boolean(fieldSchema.indexKeyConfigurations &&
+                fieldSchema.indexKeyConfigurations[indexName]) : Boolean(fieldSchema.keyType);
+    }
+    return false;
+}
+exports.isKey = isKey;
+//# sourceMappingURL=isKey.js.map
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-data-marshaller/build/keysFromSchema.js":
+/*!*******************************************************************!*\
+  !*** ../../@aws/dynamodb-data-marshaller/build/keysFromSchema.js ***!
+  \*******************************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var tslib_1 = __webpack_require__(/*! tslib */ "../../tslib/tslib.es6.js");
+function keysFromSchema(schema) {
+    var e_1, _a, e_2, _b;
+    var attributes = {};
+    var tableKeys = {};
+    var indexKeys = {};
+    try {
+        for (var _c = tslib_1.__values(Object.keys(schema)), _d = _c.next(); !_d.done; _d = _c.next()) {
+            var propertyName = _d.value;
+            var fieldSchema = schema[propertyName];
+            if (fieldSchema.type === 'Binary' ||
+                fieldSchema.type === 'Custom' ||
+                fieldSchema.type === 'Date' ||
+                fieldSchema.type === 'Number' ||
+                fieldSchema.type === 'String') {
+                var _e = fieldSchema.attributeName, attributeName = _e === void 0 ? propertyName : _e;
+                if (fieldSchema.keyType) {
+                    attributes[attributeName] = attributeType(fieldSchema);
+                    tableKeys[attributeName] = fieldSchema.keyType;
+                }
+                if (fieldSchema.indexKeyConfigurations &&
+                    Object.keys(fieldSchema.indexKeyConfigurations).length > 0) {
+                    attributes[attributeName] = attributeType(fieldSchema);
+                    try {
+                        for (var _f = tslib_1.__values(Object.keys(fieldSchema.indexKeyConfigurations)), _g = _f.next(); !_g.done; _g = _f.next()) {
+                            var indexName = _g.value;
+                            if (!(indexName in indexKeys)) {
+                                indexKeys[indexName] = {};
+                            }
+                            indexKeys[indexName][attributeName]
+                                = fieldSchema.indexKeyConfigurations[indexName];
+                        }
+                    }
+                    catch (e_2_1) { e_2 = { error: e_2_1 }; }
+                    finally {
+                        try {
+                            if (_g && !_g.done && (_b = _f.return)) _b.call(_f);
+                        }
+                        finally { if (e_2) throw e_2.error; }
+                    }
+                }
+            }
+        }
+    }
+    catch (e_1_1) { e_1 = { error: e_1_1 }; }
+    finally {
+        try {
+            if (_d && !_d.done && (_a = _c.return)) _a.call(_c);
+        }
+        finally { if (e_1) throw e_1.error; }
+    }
+    return { attributes: attributes, tableKeys: tableKeys, indexKeys: indexKeys };
+}
+exports.keysFromSchema = keysFromSchema;
+function attributeType(fieldSchema) {
+    switch (fieldSchema.type) {
+        case 'Binary':
+            return 'B';
+        case 'Custom':
+            if (!fieldSchema.attributeType) {
+                throw new Error('Invalid schema: no attribute type defined for custom field');
+            }
+            return fieldSchema.attributeType;
+        case 'Date':
+        case 'Number':
+            return 'N';
+        case 'String':
+            return 'S';
+    }
+}
+//# sourceMappingURL=keysFromSchema.js.map
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-data-marshaller/build/marshallExpression.js":
+/*!***********************************************************************!*\
+  !*** ../../@aws/dynamodb-data-marshaller/build/marshallExpression.js ***!
+  \***********************************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var tslib_1 = __webpack_require__(/*! tslib */ "../../tslib/tslib.es6.js");
+var toSchemaName_1 = __webpack_require__(/*! ./toSchemaName */ "../../@aws/dynamodb-data-marshaller/build/toSchemaName.js");
+var dynamodb_expressions_1 = __webpack_require__(/*! @aws/dynamodb-expressions */ "../../@aws/dynamodb-expressions/build/index.js");
+/**
+ * Serialize a condition expression, substituting any property names for the
+ * corresponding attribute names in the provided schema.
+ *
+ * @param expression The expression object to marshall.
+ * @param schema The schema of the table to which the expression pertains.
+ * @param attributes An optional ExpressionAttributes object to synchronize
+ *                      substitutions across multiple expressions.
+ */
+function marshallConditionExpression(expression, schema, attributes) {
+    if (attributes === void 0) { attributes = new dynamodb_expressions_1.ExpressionAttributes; }
+    var serialized = dynamodb_expressions_1.serializeConditionExpression(normalizeConditionExpression(expression, schema), attributes);
+    return {
+        expression: serialized,
+        ExpressionAttributeNames: attributes.names,
+        ExpressionAttributeValues: attributes.values,
+    };
+}
+exports.marshallConditionExpression = marshallConditionExpression;
+/**
+ * Serialize a function expression, substituting any property names for the
+ * corresponding attribute names in the provided schema.
+ *
+ * @param expression The expression object to marshall.
+ * @param schema The schema of the table to which the expression pertains.
+ * @param attributes An optional ExpressionAttributes object to synchronize
+ *                      substitutions across multiple expressions.
+ */
+function marshallFunctionExpression(expression, schema, attributes) {
+    if (attributes === void 0) { attributes = new dynamodb_expressions_1.ExpressionAttributes; }
+    var serialized = normalizeFunctionExpression(expression, schema)
+        .serialize(attributes);
+    return {
+        expression: serialized,
+        ExpressionAttributeNames: attributes.names,
+        ExpressionAttributeValues: attributes.values,
+    };
+}
+exports.marshallFunctionExpression = marshallFunctionExpression;
+/**
+ * Serialize a mathematical expression, substituting any property names for the
+ * corresponding attribute names in the provided schema.
+ *
+ * @param expression The expression object to marshall.
+ * @param schema The schema of the table to which the expression pertains.
+ * @param attributes An optional ExpressionAttributes object to synchronize
+ *                      substitutions across multiple expressions.
+ */
+function marshallMathematicalExpression(expression, schema, attributes) {
+    if (attributes === void 0) { attributes = new dynamodb_expressions_1.ExpressionAttributes; }
+    var serialized = normalizeMathematicalExpression(expression, schema)
+        .serialize(attributes);
+    return {
+        expression: serialized,
+        ExpressionAttributeNames: attributes.names,
+        ExpressionAttributeValues: attributes.values,
+    };
+}
+exports.marshallMathematicalExpression = marshallMathematicalExpression;
+/**
+ * Serialize a projection expression, substituting any property names for the
+ * corresponding attribute names in the provided schema.
+ *
+ * @param expression The expression object to marshall.
+ * @param schema The schema of the table to which the expression pertains.
+ * @param attributes An optional ExpressionAttributes object to synchronize
+ *                      substitutions across multiple expressions.
+ */
+function marshallProjectionExpression(expression, schema, attributes) {
+    if (attributes === void 0) { attributes = new dynamodb_expressions_1.ExpressionAttributes; }
+    var serialized = dynamodb_expressions_1.serializeProjectionExpression(expression.map(function (el) { return toSchemaName_1.toSchemaName(el, schema); }), attributes);
+    return {
+        expression: serialized,
+        ExpressionAttributeNames: attributes.names,
+        ExpressionAttributeValues: attributes.values,
+    };
+}
+exports.marshallProjectionExpression = marshallProjectionExpression;
+/**
+ * Serialize an update expression, substituting any property names for the
+ * corresponding attribute names in the provided schema.
+ *
+ * @param expression The expression object to marshall.
+ * @param schema The schema of the table to which the expression pertains.
+ * @param attributes An optional ExpressionAttributes object to synchronize
+ *                      substitutions across multiple expressions.
+ */
+function marshallUpdateExpression(expression, schema, attributes) {
+    if (attributes === void 0) { attributes = new dynamodb_expressions_1.ExpressionAttributes; }
+    var serialized = normalizeUpdateExpression(expression, schema)
+        .serialize(attributes);
+    return {
+        expression: serialized,
+        ExpressionAttributeNames: attributes.names,
+        ExpressionAttributeValues: attributes.values,
+    };
+}
+exports.marshallUpdateExpression = marshallUpdateExpression;
+function normalizeConditionExpression(expression, schema) {
+    if (dynamodb_expressions_1.FunctionExpression.isFunctionExpression(expression)) {
+        return normalizeFunctionExpression(expression, schema);
+    }
+    switch (expression.type) {
+        case 'Equals':
+        case 'NotEquals':
+        case 'LessThan':
+        case 'LessThanOrEqualTo':
+        case 'GreaterThan':
+        case 'GreaterThanOrEqualTo':
+            return tslib_1.__assign({}, expression, { subject: toSchemaName_1.toSchemaName(expression.subject, schema), object: normalizeIfPath(expression.object, schema) });
+        case 'Function':
+            switch (expression.name) {
+                case 'attribute_exists':
+                case 'attribute_not_exists':
+                    return tslib_1.__assign({}, expression, { subject: toSchemaName_1.toSchemaName(expression.subject, schema) });
+                case 'attribute_type':
+                case 'begins_with':
+                case 'contains':
+                    return tslib_1.__assign({}, expression, { subject: toSchemaName_1.toSchemaName(expression.subject, schema) });
+            }
+        case 'Between':
+            return tslib_1.__assign({}, expression, { subject: toSchemaName_1.toSchemaName(expression.subject, schema), lowerBound: normalizeIfPath(expression.lowerBound, schema), upperBound: normalizeIfPath(expression.upperBound, schema) });
+        case 'Membership':
+            return tslib_1.__assign({}, expression, { subject: toSchemaName_1.toSchemaName(expression.subject, schema), values: expression.values.map(function (arg) { return normalizeIfPath(arg, schema); }) });
+        case 'Not':
+            return tslib_1.__assign({}, expression, { condition: normalizeConditionExpression(expression.condition, schema) });
+        case 'And':
+        case 'Or':
+            return tslib_1.__assign({}, expression, { conditions: expression.conditions.map(function (condition) {
+                    return normalizeConditionExpression(condition, schema);
+                }) });
+    }
+}
+function normalizeFunctionExpression(expression, schema) {
+    return new (dynamodb_expressions_1.FunctionExpression.bind.apply(dynamodb_expressions_1.FunctionExpression, tslib_1.__spread([void 0, expression.name], expression.args.map(function (arg) { return normalizeIfPath(arg, schema); }))))();
+}
+function normalizeMathematicalExpression(expression, schema) {
+    return new dynamodb_expressions_1.MathematicalExpression(dynamodb_expressions_1.AttributePath.isAttributePath(expression.lhs) || typeof expression.lhs === 'string'
+        ? toSchemaName_1.toSchemaName(expression.lhs, schema)
+        : expression.lhs, expression.operator, dynamodb_expressions_1.AttributePath.isAttributePath(expression.rhs) || typeof expression.rhs === 'string'
+        ? toSchemaName_1.toSchemaName(expression.rhs, schema)
+        : expression.rhs);
+}
+var mapsToTransform = [
+    ['toAdd', 'add'],
+    ['toDelete', 'delete'],
+    ['toSet', 'set'],
+];
+function normalizeUpdateExpression(expression, schema) {
+    var e_1, _a, e_2, _b;
+    var normalized = new dynamodb_expressions_1.UpdateExpression;
+    try {
+        for (var mapsToTransform_1 = tslib_1.__values(mapsToTransform), mapsToTransform_1_1 = mapsToTransform_1.next(); !mapsToTransform_1_1.done; mapsToTransform_1_1 = mapsToTransform_1.next()) {
+            var _c = tslib_1.__read(mapsToTransform_1_1.value, 2), dataSet = _c[0], exprMethod = _c[1];
+            try {
+                for (var _d = tslib_1.__values(expression[dataSet]), _e = _d.next(); !_e.done; _e = _d.next()) {
+                    var _f = tslib_1.__read(_e.value, 2), path = _f[0], value = _f[1];
+                    normalized[exprMethod](toSchemaName_1.toSchemaName(path, schema), value);
+                }
+            }
+            catch (e_2_1) { e_2 = { error: e_2_1 }; }
+            finally {
+                try {
+                    if (_e && !_e.done && (_b = _d.return)) _b.call(_d);
+                }
+                finally { if (e_2) throw e_2.error; }
+            }
+        }
+    }
+    catch (e_1_1) { e_1 = { error: e_1_1 }; }
+    finally {
+        try {
+            if (mapsToTransform_1_1 && !mapsToTransform_1_1.done && (_a = mapsToTransform_1.return)) _a.call(mapsToTransform_1);
+        }
+        finally { if (e_1) throw e_1.error; }
+    }
+    expression.toRemove.forEach(function (el) { return normalized.remove(toSchemaName_1.toSchemaName(el, schema)); });
+    return normalized;
+}
+function normalizeIfPath(path, schema) {
+    if (dynamodb_expressions_1.AttributePath.isAttributePath(path)) {
+        return toSchemaName_1.toSchemaName(path, schema);
+    }
+    return path;
+}
+//# sourceMappingURL=marshallExpression.js.map
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-data-marshaller/build/marshallItem.js":
+/*!*****************************************************************!*\
+  !*** ../../@aws/dynamodb-data-marshaller/build/marshallItem.js ***!
+  \*****************************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var tslib_1 = __webpack_require__(/*! tslib */ "../../tslib/tslib.es6.js");
+var InvalidValueError_1 = __webpack_require__(/*! ./InvalidValueError */ "../../@aws/dynamodb-data-marshaller/build/InvalidValueError.js");
+var InvalidSchemaError_1 = __webpack_require__(/*! ./InvalidSchemaError */ "../../@aws/dynamodb-data-marshaller/build/InvalidSchemaError.js");
+var dynamodb_auto_marshaller_1 = __webpack_require__(/*! @aws/dynamodb-auto-marshaller */ "../../@aws/dynamodb-auto-marshaller/build/index.js");
+var bytes = __webpack_require__(/*! utf8-bytes */ "../../utf8-bytes/index.js");
+/**
+ * Converts a JavaScript object into a DynamoDB Item.
+ *
+ * @param schema Metadata explaining how the provided input is to be marshalled
+ * @param input JavaScript object to convert
+ */
+function marshallItem(schema, input) {
+    var e_1, _a;
+    var marshalled = {};
+    try {
+        for (var _b = tslib_1.__values(Object.keys(schema)), _c = _b.next(); !_c.done; _c = _b.next()) {
+            var key = _c.value;
+            var value = input[key];
+            var _d = schema[key].attributeName, attributeName = _d === void 0 ? key : _d;
+            var marshalledValue = marshallValue(schema[key], value);
+            if (marshalledValue) {
+                marshalled[attributeName] = marshalledValue;
+            }
+        }
+    }
+    catch (e_1_1) { e_1 = { error: e_1_1 }; }
+    finally {
+        try {
+            if (_c && !_c.done && (_a = _b.return)) _a.call(_b);
+        }
+        finally { if (e_1) throw e_1.error; }
+    }
+    return marshalled;
+}
+exports.marshallItem = marshallItem;
+/**
+ * Converts a value into a DynamoDB AttributeValue.
+ *
+ * @param schemaType    Metadata outlining how the value is to be understood and
+ *                      converted
+ * @param input         Value to convert
+ */
+function marshallValue(schemaType, input) {
+    var e_2, _a, e_3, _b, e_4, _c, e_5, _d, e_6, _e, e_7, _f;
+    if (input === undefined) {
+        var defaultProvider = schemaType.defaultProvider;
+        if (typeof defaultProvider === 'function') {
+            input = defaultProvider();
+        }
+        else {
+            return undefined;
+        }
+    }
+    if (schemaType.type === 'Any') {
+        var _g = schemaType.onEmpty, onEmpty = _g === void 0 ? 'nullify' : _g, _h = schemaType.onInvalid, onInvalid = _h === void 0 ? 'omit' : _h, _j = schemaType.unwrapNumbers, unwrapNumbers = _j === void 0 ? false : _j;
+        var marshaller = new dynamodb_auto_marshaller_1.Marshaller({ onEmpty: onEmpty, onInvalid: onInvalid, unwrapNumbers: unwrapNumbers });
+        return marshaller.marshallValue(input);
+    }
+    if (schemaType.type === 'Binary') {
+        if (!input || input.length === 0 || input.byteLength === 0) {
+            return { NULL: true };
+        }
+        return { B: marshallBinary(input) };
+    }
+    if (schemaType.type === 'Boolean') {
+        return { BOOL: Boolean(input) };
+    }
+    if (schemaType.type === 'Custom') {
+        return schemaType.marshall(input);
+    }
+    if (schemaType.type === 'Collection') {
+        var _k = schemaType.onEmpty, onEmpty = _k === void 0 ? 'nullify' : _k, _l = schemaType.onInvalid, onInvalid = _l === void 0 ? 'omit' : _l, _m = schemaType.unwrapNumbers, unwrapNumbers = _m === void 0 ? false : _m;
+        var marshaller = new dynamodb_auto_marshaller_1.Marshaller({ onEmpty: onEmpty, onInvalid: onInvalid, unwrapNumbers: unwrapNumbers });
+        var collected = [];
+        try {
+            for (var input_1 = tslib_1.__values(input), input_1_1 = input_1.next(); !input_1_1.done; input_1_1 = input_1.next()) {
+                var element = input_1_1.value;
+                var marshalled = marshaller.marshallValue(element);
+                if (marshalled) {
+                    collected.push(marshalled);
+                }
+            }
+        }
+        catch (e_2_1) { e_2 = { error: e_2_1 }; }
+        finally {
+            try {
+                if (input_1_1 && !input_1_1.done && (_a = input_1.return)) _a.call(input_1);
+            }
+            finally { if (e_2) throw e_2.error; }
+        }
+        return { L: collected };
+    }
+    if (schemaType.type === 'Date') {
+        var date = void 0;
+        if (typeof input === 'string') {
+            date = new Date(input);
+        }
+        else if (typeof input === 'number') {
+            date = new Date(input * 1000);
+        }
+        else if (isDate(input)) {
+            date = input;
+        }
+        else {
+            throw new InvalidValueError_1.InvalidValueError(input, 'Unable to convert value to date');
+        }
+        return { N: marshallNumber(Math.floor(date.valueOf() / 1000)) };
+    }
+    if (schemaType.type === 'Document') {
+        return { M: marshallItem(schemaType.members, input) };
+    }
+    if (schemaType.type === 'Hash') {
+        var _o = schemaType.onEmpty, onEmpty = _o === void 0 ? 'nullify' : _o, _p = schemaType.onInvalid, onInvalid = _p === void 0 ? 'omit' : _p, _q = schemaType.unwrapNumbers, unwrapNumbers = _q === void 0 ? false : _q;
+        var marshaller = new dynamodb_auto_marshaller_1.Marshaller({ onEmpty: onEmpty, onInvalid: onInvalid, unwrapNumbers: unwrapNumbers });
+        return { M: marshaller.marshallItem(input) };
+    }
+    if (schemaType.type === 'List') {
+        var elements = [];
+        try {
+            for (var input_2 = tslib_1.__values(input), input_2_1 = input_2.next(); !input_2_1.done; input_2_1 = input_2.next()) {
+                var member = input_2_1.value;
+                var marshalled = marshallValue(schemaType.memberType, member);
+                if (marshalled) {
+                    elements.push(marshalled);
+                }
+            }
+        }
+        catch (e_3_1) { e_3 = { error: e_3_1 }; }
+        finally {
+            try {
+                if (input_2_1 && !input_2_1.done && (_b = input_2.return)) _b.call(input_2);
+            }
+            finally { if (e_3) throw e_3.error; }
+        }
+        return { L: elements };
+    }
+    if (schemaType.type === 'Map') {
+        var marshalled = {};
+        if (typeof input[Symbol.iterator] === 'function') {
+            try {
+                for (var input_3 = tslib_1.__values(input), input_3_1 = input_3.next(); !input_3_1.done; input_3_1 = input_3.next()) {
+                    var _r = tslib_1.__read(input_3_1.value, 2), key = _r[0], value = _r[1];
+                    var marshalledValue = marshallValue(schemaType.memberType, value);
+                    if (marshalledValue) {
+                        marshalled[key] = marshalledValue;
+                    }
+                }
+            }
+            catch (e_4_1) { e_4 = { error: e_4_1 }; }
+            finally {
+                try {
+                    if (input_3_1 && !input_3_1.done && (_c = input_3.return)) _c.call(input_3);
+                }
+                finally { if (e_4) throw e_4.error; }
+            }
+        }
+        else if (typeof input === 'object') {
+            try {
+                for (var _s = tslib_1.__values(Object.keys(input)), _t = _s.next(); !_t.done; _t = _s.next()) {
+                    var key = _t.value;
+                    var marshalledValue = marshallValue(schemaType.memberType, input[key]);
+                    if (marshalledValue) {
+                        marshalled[key] = marshalledValue;
+                    }
+                }
+            }
+            catch (e_5_1) { e_5 = { error: e_5_1 }; }
+            finally {
+                try {
+                    if (_t && !_t.done && (_d = _s.return)) _d.call(_s);
+                }
+                finally { if (e_5) throw e_5.error; }
+            }
+        }
+        else {
+            throw new InvalidValueError_1.InvalidValueError(input, 'Unable to convert value to map');
+        }
+        return { M: marshalled };
+    }
+    if (schemaType.type === 'Null') {
+        return { NULL: true };
+    }
+    if (schemaType.type === 'Number') {
+        return { N: marshallNumber(input) };
+    }
+    if (schemaType.type === 'Set') {
+        if (schemaType.memberType === 'Binary') {
+            if (!(input instanceof dynamodb_auto_marshaller_1.BinarySet)) {
+                var set = new dynamodb_auto_marshaller_1.BinarySet();
+                try {
+                    for (var input_4 = tslib_1.__values(input), input_4_1 = input_4.next(); !input_4_1.done; input_4_1 = input_4.next()) {
+                        var item = input_4_1.value;
+                        set.add(marshallBinary(item));
+                    }
+                }
+                catch (e_6_1) { e_6 = { error: e_6_1 }; }
+                finally {
+                    try {
+                        if (input_4_1 && !input_4_1.done && (_e = input_4.return)) _e.call(input_4);
+                    }
+                    finally { if (e_6) throw e_6.error; }
+                }
+                input = set;
+            }
+            return marshallSet(input, marshallBinary, function (bin) { return bin.byteLength === 0; }, 'BS');
+        }
+        if (schemaType.memberType === 'Number') {
+            if (!(input instanceof Set)) {
+                input = new dynamodb_auto_marshaller_1.NumberValueSet(input);
+            }
+            return marshallSet(input, marshallNumber, function () { return false; }, 'NS');
+        }
+        if (schemaType.memberType === 'String') {
+            if (!(input instanceof Set)) {
+                var original = input;
+                input = new Set();
+                try {
+                    for (var original_1 = tslib_1.__values(original), original_1_1 = original_1.next(); !original_1_1.done; original_1_1 = original_1.next()) {
+                        var el = original_1_1.value;
+                        input.add(el);
+                    }
+                }
+                catch (e_7_1) { e_7 = { error: e_7_1 }; }
+                finally {
+                    try {
+                        if (original_1_1 && !original_1_1.done && (_f = original_1.return)) _f.call(original_1);
+                    }
+                    finally { if (e_7) throw e_7.error; }
+                }
+            }
+            return marshallSet(input, marshallString, function (string) { return string.length === 0; }, 'SS');
+        }
+        throw new InvalidSchemaError_1.InvalidSchemaError(schemaType, "Unrecognized set member type: " + schemaType.memberType);
+    }
+    if (schemaType.type === 'String') {
+        var string = marshallString(input);
+        if (string.length === 0) {
+            return { NULL: true };
+        }
+        return { S: string };
+    }
+    if (schemaType.type === 'Tuple') {
+        return {
+            L: schemaType.members
+                .map(function (type, index) { return marshallValue(type, input[index]); })
+                .filter(function (val) { return val !== undefined; })
+        };
+    }
+    throw new InvalidSchemaError_1.InvalidSchemaError(schemaType, 'Unrecognized schema node');
+}
+exports.marshallValue = marshallValue;
+function marshallBinary(input) {
+    if (ArrayBuffer.isView(input)) {
+        return new Uint8Array(input.buffer, input.byteOffset, input.byteLength);
+    }
+    if (isArrayBuffer(input)) {
+        return new Uint8Array(input);
+    }
+    return Uint8Array.from(bytes(input));
+}
+function marshallNumber(input) {
+    return input.toString(10);
+}
+function marshallString(input) {
+    return input.toString();
+}
+function marshallSet(value, marshaller, isEmpty, setTag) {
+    var e_8, _a, _b;
+    var collected = [];
+    try {
+        for (var value_1 = tslib_1.__values(value), value_1_1 = value_1.next(); !value_1_1.done; value_1_1 = value_1.next()) {
+            var member = value_1_1.value;
+            var marshalled = marshaller(member);
+            if (isEmpty(marshalled)) {
+                // DynamoDB sets cannot contain empty values
+                continue;
+            }
+            collected.push(marshalled);
+        }
+    }
+    catch (e_8_1) { e_8 = { error: e_8_1 }; }
+    finally {
+        try {
+            if (value_1_1 && !value_1_1.done && (_a = value_1.return)) _a.call(value_1);
+        }
+        finally { if (e_8) throw e_8.error; }
+    }
+    if (collected.length === 0) {
+        return { NULL: true };
+    }
+    return _b = {}, _b[setTag] = collected, _b;
+}
+function isArrayBuffer(arg) {
+    return typeof ArrayBuffer === 'function'
+        && (arg instanceof ArrayBuffer ||
+            Object.prototype.toString.call(arg) === '[object ArrayBuffer]');
+}
+function isDate(arg) {
+    return arg instanceof Date
+        || Object.prototype.toString.call(arg) === '[object Date]';
+}
+//# sourceMappingURL=marshallItem.js.map
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-data-marshaller/build/marshallKey.js":
+/*!****************************************************************!*\
+  !*** ../../@aws/dynamodb-data-marshaller/build/marshallKey.js ***!
+  \****************************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var tslib_1 = __webpack_require__(/*! tslib */ "../../tslib/tslib.es6.js");
+var isKey_1 = __webpack_require__(/*! ./isKey */ "../../@aws/dynamodb-data-marshaller/build/isKey.js");
+var marshallItem_1 = __webpack_require__(/*! ./marshallItem */ "../../@aws/dynamodb-data-marshaller/build/marshallItem.js");
+function marshallKey(schema, input, indexName) {
+    var e_1, _a;
+    var marshalled = {};
+    try {
+        for (var _b = tslib_1.__values(Object.keys(schema)), _c = _b.next(); !_c.done; _c = _b.next()) {
+            var propertyKey = _c.value;
+            var fieldSchema = schema[propertyKey];
+            if (isKey_1.isKey(fieldSchema, indexName)) {
+                var _d = fieldSchema.attributeName, attributeName = _d === void 0 ? propertyKey : _d;
+                var value = marshallItem_1.marshallValue(fieldSchema, input[propertyKey]);
+                if (value) {
+                    marshalled[attributeName] = value;
+                }
+            }
+        }
+    }
+    catch (e_1_1) { e_1 = { error: e_1_1 }; }
+    finally {
+        try {
+            if (_c && !_c.done && (_a = _b.return)) _a.call(_b);
+        }
+        finally { if (e_1) throw e_1.error; }
+    }
+    return marshalled;
+}
+exports.marshallKey = marshallKey;
+//# sourceMappingURL=marshallKey.js.map
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-data-marshaller/build/toSchemaName.js":
+/*!*****************************************************************!*\
+  !*** ../../@aws/dynamodb-data-marshaller/build/toSchemaName.js ***!
+  \*****************************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var tslib_1 = __webpack_require__(/*! tslib */ "../../tslib/tslib.es6.js");
+var dynamodb_expressions_1 = __webpack_require__(/*! @aws/dynamodb-expressions */ "../../@aws/dynamodb-expressions/build/index.js");
+function toSchemaName(path, schema) {
+    var e_1, _a;
+    if (typeof path === 'string') {
+        path = new dynamodb_expressions_1.AttributePath(path);
+    }
+    var elements = path.elements.map(function (el) { return (tslib_1.__assign({}, el)); });
+    var cursor = {
+        type: 'Document',
+        members: schema
+    };
+    try {
+        for (var elements_1 = tslib_1.__values(elements), elements_1_1 = elements_1.next(); !elements_1_1.done; elements_1_1 = elements_1.next()) {
+            var element = elements_1_1.value;
+            if (element.type === 'AttributeName' &&
+                cursor &&
+                cursor.type === 'Document') {
+                var name = element.name;
+                element.name = getSchemaName(name, cursor.members);
+                cursor = cursor.members[name];
+            }
+            else if (element.type === 'ListIndex' &&
+                cursor &&
+                cursor.type === 'List') {
+                cursor = cursor.memberType;
+            }
+            else {
+                break;
+            }
+        }
+    }
+    catch (e_1_1) { e_1 = { error: e_1_1 }; }
+    finally {
+        try {
+            if (elements_1_1 && !elements_1_1.done && (_a = elements_1.return)) _a.call(elements_1);
+        }
+        finally { if (e_1) throw e_1.error; }
+    }
+    return new dynamodb_expressions_1.AttributePath(elements);
+}
+exports.toSchemaName = toSchemaName;
+function getSchemaName(propertyName, schema) {
+    var fieldSchema = schema[propertyName];
+    if (fieldSchema) {
+        var _a = fieldSchema.attributeName, attributeName = _a === void 0 ? propertyName : _a;
+        return attributeName;
+    }
+    return propertyName;
+}
+exports.getSchemaName = getSchemaName;
+//# sourceMappingURL=toSchemaName.js.map
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-data-marshaller/build/unmarshallItem.js":
+/*!*******************************************************************!*\
+  !*** ../../@aws/dynamodb-data-marshaller/build/unmarshallItem.js ***!
+  \*******************************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var tslib_1 = __webpack_require__(/*! tslib */ "../../tslib/tslib.es6.js");
+var InvalidSchemaError_1 = __webpack_require__(/*! ./InvalidSchemaError */ "../../@aws/dynamodb-data-marshaller/build/InvalidSchemaError.js");
+var dynamodb_auto_marshaller_1 = __webpack_require__(/*! @aws/dynamodb-auto-marshaller */ "../../@aws/dynamodb-auto-marshaller/build/index.js");
+/**
+ * Unmarshall a DynamoDB item into a JavaScript value.
+ *
+ * @param schema            Metadata outlining the types to be expected
+ *                          throughout the input
+ * @param input             The value to unmarshall
+ * @param valueConstructor  A zero-argument constructor used to create the
+ *                          object onto which the input should be unmarshalled
+ */
+function unmarshallItem(schema, input, valueConstructor) {
+    var e_1, _a;
+    var unmarshalled = valueConstructor
+        ? new valueConstructor()
+        : Object.create(null);
+    try {
+        for (var _b = tslib_1.__values(Object.keys(schema)), _c = _b.next(); !_c.done; _c = _b.next()) {
+            var key = _c.value;
+            var _d = schema[key].attributeName, attributeName = _d === void 0 ? key : _d;
+            if (attributeName in input) {
+                unmarshalled[key] = unmarshallValue(schema[key], input[attributeName]);
+            }
+        }
+    }
+    catch (e_1_1) { e_1 = { error: e_1_1 }; }
+    finally {
+        try {
+            if (_c && !_c.done && (_a = _b.return)) _a.call(_b);
+        }
+        finally { if (e_1) throw e_1.error; }
+    }
+    return unmarshalled;
+}
+exports.unmarshallItem = unmarshallItem;
+function unmarshallValue(schemaType, input) {
+    switch (schemaType.type) {
+        case 'Any':
+        case 'Collection':
+        case 'Hash':
+            var autoMarshaller = new dynamodb_auto_marshaller_1.Marshaller();
+            return autoMarshaller.unmarshallValue(input);
+        case 'Binary':
+            if (input.NULL) {
+                return new Uint8Array(0);
+            }
+            return input.B;
+        case 'Boolean':
+            return input.BOOL;
+        case 'Custom':
+            return schemaType.unmarshall(input);
+        case 'Date':
+            return input.N ? new Date(Number(input.N) * 1000) : undefined;
+        case 'Document':
+            return input.M
+                ? unmarshallItem(schemaType.members, input.M, schemaType.valueConstructor) : undefined;
+        case 'List':
+            return input.L ? unmarshallList(schemaType, input.L) : undefined;
+        case 'Map':
+            return input.M ? unmarshallMap(schemaType, input.M) : undefined;
+        case 'Null':
+            return input.NULL ? null : undefined;
+        case 'Number':
+            return typeof input.N === 'string' ? Number(input.N) : undefined;
+        case 'Set':
+            switch (schemaType.memberType) {
+                case 'Binary':
+                    if (input.NULL) {
+                        return new dynamodb_auto_marshaller_1.BinarySet();
+                    }
+                    return typeof input.BS !== 'undefined'
+                        ? new dynamodb_auto_marshaller_1.BinarySet(input.BS)
+                        : undefined;
+                case 'Number':
+                    if (input.NULL) {
+                        return new Set();
+                    }
+                    return input.NS ? unmarshallNumberSet(input.NS) : undefined;
+                case 'String':
+                    if (input.NULL) {
+                        return new Set();
+                    }
+                    return input.SS ? unmarshallStringSet(input.SS) : undefined;
+                default:
+                    throw new InvalidSchemaError_1.InvalidSchemaError(schemaType, "Unrecognized set member type: " + schemaType.memberType);
+            }
+        case 'String':
+            return input.NULL ? '' : input.S;
+        case 'Tuple':
+            return input.L ? unmarshallTuple(schemaType, input.L) : undefined;
+    }
+    throw new InvalidSchemaError_1.InvalidSchemaError(schemaType, 'Unrecognized schema node');
+}
+function unmarshallList(schemaType, input) {
+    var e_2, _a;
+    var list = [];
+    try {
+        for (var input_1 = tslib_1.__values(input), input_1_1 = input_1.next(); !input_1_1.done; input_1_1 = input_1.next()) {
+            var element = input_1_1.value;
+            list.push(unmarshallValue(schemaType.memberType, element));
+        }
+    }
+    catch (e_2_1) { e_2 = { error: e_2_1 }; }
+    finally {
+        try {
+            if (input_1_1 && !input_1_1.done && (_a = input_1.return)) _a.call(input_1);
+        }
+        finally { if (e_2) throw e_2.error; }
+    }
+    return list;
+}
+function unmarshallMap(schemaType, input) {
+    var e_3, _a;
+    var map = new Map();
+    try {
+        for (var _b = tslib_1.__values(Object.keys(input)), _c = _b.next(); !_c.done; _c = _b.next()) {
+            var key = _c.value;
+            map.set(key, unmarshallValue(schemaType.memberType, input[key]));
+        }
+    }
+    catch (e_3_1) { e_3 = { error: e_3_1 }; }
+    finally {
+        try {
+            if (_c && !_c.done && (_a = _b.return)) _a.call(_b);
+        }
+        finally { if (e_3) throw e_3.error; }
+    }
+    return map;
+}
+function unmarshallNumberSet(input) {
+    var e_4, _a;
+    var set = new Set();
+    try {
+        for (var input_2 = tslib_1.__values(input), input_2_1 = input_2.next(); !input_2_1.done; input_2_1 = input_2.next()) {
+            var number = input_2_1.value;
+            set.add(Number(number));
+        }
+    }
+    catch (e_4_1) { e_4 = { error: e_4_1 }; }
+    finally {
+        try {
+            if (input_2_1 && !input_2_1.done && (_a = input_2.return)) _a.call(input_2);
+        }
+        finally { if (e_4) throw e_4.error; }
+    }
+    return set;
+}
+function unmarshallStringSet(input) {
+    var e_5, _a;
+    var set = new Set();
+    try {
+        for (var input_3 = tslib_1.__values(input), input_3_1 = input_3.next(); !input_3_1.done; input_3_1 = input_3.next()) {
+            var string = input_3_1.value;
+            set.add(string);
+        }
+    }
+    catch (e_5_1) { e_5 = { error: e_5_1 }; }
+    finally {
+        try {
+            if (input_3_1 && !input_3_1.done && (_a = input_3.return)) _a.call(input_3);
+        }
+        finally { if (e_5) throw e_5.error; }
+    }
+    return set;
+}
+function unmarshallTuple(schemaType, input) {
+    var members = schemaType.members;
+    var tuple = [];
+    for (var i = 0; i < members.length; i++) {
+        tuple.push(unmarshallValue(members[i], input[i]));
+    }
+    return tuple;
+}
+//# sourceMappingURL=unmarshallItem.js.map
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-expressions/build/AttributePath.js":
+/*!**************************************************************!*\
+  !*** ../../@aws/dynamodb-expressions/build/AttributePath.js ***!
+  \**************************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var tslib_1 = __webpack_require__(/*! tslib */ "../../tslib/tslib.es6.js");
+var ATTRIBUTE_PATH_TAG = 'AmazonDynamoDbAttributePath';
+var EXPECTED_TAG = "[object " + ATTRIBUTE_PATH_TAG + "]";
+/**
+ * The path to an attribute of a DynamoDB item or to a property
+ * or member thereof. Supports map property access (`map.property`)
+ * and list member access (`list[1]`).
+ *
+ * Control characters that are part of the property identifier may be
+ * used when escaped with a backslash (`\`) character.
+ */
+var AttributePath = /** @class */ (function () {
+    function AttributePath(path) {
+        this[Symbol.toStringTag] = ATTRIBUTE_PATH_TAG;
+        if (typeof path === 'string') {
+            this.elements = parsePath(path);
+        }
+        else {
+            this.elements = tslib_1.__spread(path);
+        }
+    }
+    /**
+     * Determine if the provided value is an AttributePath object.
+     * Compatible with AttributePath objects generated in other iframes
+     * or Node VMs.
+     */
+    AttributePath.isAttributePath = function (arg) {
+        return arg instanceof AttributePath
+            || Object.prototype.toString.call(arg) === EXPECTED_TAG;
+    };
+    return AttributePath;
+}());
+exports.AttributePath = AttributePath;
+var LEFT_BRACKET = '[';
+var RIGHT_BRACKET = ']';
+var PATH_DELIMITER = '.';
+var ESCAPE_CHARACTER = '\\';
+function parsePath(path) {
+    var elements = [];
+    var state = 1001 /* identifier */;
+    var collected = '';
+    for (var iter = path[Symbol.iterator](), curr = iter.next(), peek = iter.next(); curr.done === false; curr = peek, peek = iter.next()) {
+        if (state === 1001 /* identifier */) {
+            switch (curr.value) {
+                case LEFT_BRACKET:
+                    state = 1002 /* listIndex */;
+                // fallthrough
+                case PATH_DELIMITER:
+                    if (collected === '') {
+                        throw new Error("Invalid control character encountered in path: " + path);
+                    }
+                    elements.push({ type: 'AttributeName', name: collected });
+                    collected = '';
+                    break;
+                case ESCAPE_CHARACTER:
+                    if (peek.value === PATH_DELIMITER ||
+                        peek.value === LEFT_BRACKET ||
+                        peek.value === ESCAPE_CHARACTER) {
+                        curr = peek;
+                        peek = iter.next();
+                    }
+                // fallthrough
+                default:
+                    collected += curr.value;
+            }
+        }
+        else if (state === 1002 /* listIndex */) {
+            switch (curr.value) {
+                case RIGHT_BRACKET:
+                    var intVal = parseInt(collected);
+                    if (!isFinite(intVal)) {
+                        throw new Error("Invalid array index (" + collected + ") encountered in path: " + path);
+                    }
+                    elements.push({ type: 'ListIndex', index: intVal });
+                    collected = '';
+                    state = 1000 /* controlCharacter */;
+                    break;
+                case '0':
+                case '1':
+                case '2':
+                case '3':
+                case '4':
+                case '5':
+                case '6':
+                case '7':
+                case '8':
+                case '9':
+                    collected += curr.value;
+                    break;
+                default:
+                    throw new Error("Invalid array index character (" + curr.value + ") encountered in path: " + path);
+            }
+        }
+        else {
+            switch (curr.value) {
+                case LEFT_BRACKET:
+                    state = 1002 /* listIndex */;
+                    break;
+                case PATH_DELIMITER:
+                    state = 1001 /* identifier */;
+                    break;
+                default:
+                    throw new Error("Bare identifier encountered between list index accesses in path: " + path);
+            }
+        }
+    }
+    if (collected.length > 0) {
+        elements.push({ type: 'AttributeName', name: collected });
+    }
+    return elements;
+}
+//# sourceMappingURL=AttributePath.js.map
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-expressions/build/AttributeValue.js":
+/*!***************************************************************!*\
+  !*** ../../@aws/dynamodb-expressions/build/AttributeValue.js ***!
+  \***************************************************************/
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var MARSHALLED_ATTRIBUTE_VALUE_TAG = 'AmazonDynamoDbAttributeValue';
+var EXPECTED_TOSTRING = "[object " + MARSHALLED_ATTRIBUTE_VALUE_TAG + "]";
+/**
+ * An object containing an already-marshalled DynamoDB AttributeValue.
+ * Intended to allow marshalled AttributeValues to be identified as such
+ * and distinguished from maps that resemble marshalled values.
+ */
+var AttributeValue = /** @class */ (function () {
+    function AttributeValue(marshalled) {
+        this.marshalled = marshalled;
+        this[Symbol.toStringTag] = MARSHALLED_ATTRIBUTE_VALUE_TAG;
+    }
+    AttributeValue.isAttributeValue = function (arg) {
+        return arg instanceof AttributeValue
+            || Object.prototype.toString.call(arg) === EXPECTED_TOSTRING;
+    };
+    return AttributeValue;
+}());
+exports.AttributeValue = AttributeValue;
+//# sourceMappingURL=AttributeValue.js.map
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-expressions/build/ConditionExpression.js":
+/*!********************************************************************!*\
+  !*** ../../@aws/dynamodb-expressions/build/ConditionExpression.js ***!
+  \********************************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var tslib_1 = __webpack_require__(/*! tslib */ "../../tslib/tslib.es6.js");
+var AttributePath_1 = __webpack_require__(/*! ./AttributePath */ "../../@aws/dynamodb-expressions/build/AttributePath.js");
+var FunctionExpression_1 = __webpack_require__(/*! ./FunctionExpression */ "../../@aws/dynamodb-expressions/build/FunctionExpression.js");
+/**
+ * Create an expression predicate asserting that the subject is equal to the
+ * predicate.
+ */
+function equals(operand) {
+    return {
+        type: 'Equals',
+        object: operand,
+    };
+}
+exports.equals = equals;
+function notEquals(operand) {
+    return {
+        type: 'NotEquals',
+        object: operand,
+    };
+}
+exports.notEquals = notEquals;
+function lessThan(operand) {
+    return {
+        type: 'LessThan',
+        object: operand,
+    };
+}
+exports.lessThan = lessThan;
+function lessThanOrEqualTo(operand) {
+    return {
+        type: 'LessThanOrEqualTo',
+        object: operand,
+    };
+}
+exports.lessThanOrEqualTo = lessThanOrEqualTo;
+function greaterThan(operand) {
+    return {
+        type: 'GreaterThan',
+        object: operand,
+    };
+}
+exports.greaterThan = greaterThan;
+function greaterThanOrEqualTo(operand) {
+    return {
+        type: 'GreaterThanOrEqualTo',
+        object: operand,
+    };
+}
+exports.greaterThanOrEqualTo = greaterThanOrEqualTo;
+function between(lowerBound, upperBound) {
+    return {
+        type: 'Between',
+        lowerBound: lowerBound,
+        upperBound: upperBound,
+    };
+}
+exports.between = between;
+function inList() {
+    var operands = [];
+    for (var _i = 0; _i < arguments.length; _i++) {
+        operands[_i] = arguments[_i];
+    }
+    return {
+        type: 'Membership',
+        values: operands,
+    };
+}
+exports.inList = inList;
+function attributeExists() {
+    return {
+        type: 'Function',
+        name: 'attribute_exists',
+    };
+}
+exports.attributeExists = attributeExists;
+function attributeNotExists() {
+    return {
+        type: 'Function',
+        name: 'attribute_not_exists',
+    };
+}
+exports.attributeNotExists = attributeNotExists;
+function attributeType(expected) {
+    return {
+        type: 'Function',
+        name: 'attribute_type',
+        expected: expected,
+    };
+}
+exports.attributeType = attributeType;
+function beginsWith(expected) {
+    return {
+        type: 'Function',
+        name: 'begins_with',
+        expected: expected,
+    };
+}
+exports.beginsWith = beginsWith;
+function contains(expected) {
+    return {
+        type: 'Function',
+        name: 'contains',
+        expected: expected,
+    };
+}
+exports.contains = contains;
+/**
+ * Evaluate whether the provided value is a condition expression predicate.
+ */
+function isConditionExpressionPredicate(arg) {
+    if (arg && typeof arg === 'object') {
+        switch (arg.type) {
+            case 'Equals':
+            case 'NotEquals':
+            case 'LessThan':
+            case 'LessThanOrEqualTo':
+            case 'GreaterThan':
+            case 'GreaterThanOrEqualTo':
+                return arg.object !== undefined;
+            case 'Between':
+                return arg.lowerBound !== undefined
+                    && arg.upperBound !== undefined;
+            case 'Membership':
+                return Array.isArray(arg.values);
+            case 'Function':
+                switch (arg.name) {
+                    case 'attribute_exists':
+                    case 'attribute_not_exists':
+                        return true;
+                    case 'attribute_type':
+                    case 'begins_with':
+                    case 'contains':
+                        return typeof arg.expected === 'string';
+                }
+        }
+    }
+    return false;
+}
+exports.isConditionExpressionPredicate = isConditionExpressionPredicate;
+function isConditionExpressionSubject(arg) {
+    return Boolean(arg)
+        && typeof arg === 'object'
+        && (typeof arg.subject === 'string' || AttributePath_1.AttributePath.isAttributePath(arg.subject));
+}
+exports.isConditionExpressionSubject = isConditionExpressionSubject;
+/**
+ * Evaluates whether the provided value is a condition expression.
+ */
+function isConditionExpression(arg) {
+    var e_1, _a;
+    if (FunctionExpression_1.FunctionExpression.isFunctionExpression(arg)) {
+        return true;
+    }
+    if (Boolean(arg) && typeof arg === 'object') {
+        switch (arg.type) {
+            case 'Not':
+                return isConditionExpression(arg.condition);
+            case 'And':
+            case 'Or':
+                if (Array.isArray(arg.conditions)) {
+                    try {
+                        for (var _b = tslib_1.__values(arg.conditions), _c = _b.next(); !_c.done; _c = _b.next()) {
+                            var condition = _c.value;
+                            if (!isConditionExpression(condition)) {
+                                return false;
+                            }
+                        }
+                    }
+                    catch (e_1_1) { e_1 = { error: e_1_1 }; }
+                    finally {
+                        try {
+                            if (_c && !_c.done && (_a = _b.return)) _a.call(_b);
+                        }
+                        finally { if (e_1) throw e_1.error; }
+                    }
+                    return true;
+                }
+                return false;
+            default:
+                return isConditionExpressionSubject(arg)
+                    && isConditionExpressionPredicate(arg);
+        }
+    }
+    return false;
+}
+exports.isConditionExpression = isConditionExpression;
+/**
+ * Convert the provided condition expression object to a string, escaping any
+ * values and attributes to expression-safe placeholders whose expansion value
+ * will be managed by the provided ExpressionAttributes object.
+ */
+function serializeConditionExpression(condition, attributes) {
+    if (FunctionExpression_1.FunctionExpression.isFunctionExpression(condition)) {
+        return condition.serialize(attributes);
+    }
+    switch (condition.type) {
+        case 'Equals':
+            return serializeBinaryComparison(condition, attributes, '=');
+        case 'NotEquals':
+            return serializeBinaryComparison(condition, attributes, '<>');
+        case 'LessThan':
+            return serializeBinaryComparison(condition, attributes, '<');
+        case 'LessThanOrEqualTo':
+            return serializeBinaryComparison(condition, attributes, '<=');
+        case 'GreaterThan':
+            return serializeBinaryComparison(condition, attributes, '>');
+        case 'GreaterThanOrEqualTo':
+            return serializeBinaryComparison(condition, attributes, '>=');
+        case 'Between':
+            return attributes.addName(condition.subject) + " BETWEEN " + serializeOperand(condition.lowerBound, attributes) + " AND " + serializeOperand(condition.upperBound, attributes);
+        case 'Membership':
+            return attributes.addName(condition.subject) + " IN (" + condition.values.map(function (val) { return serializeOperand(val, attributes); })
+                .join(', ') + ")";
+        case 'Function':
+            var subject = AttributePath_1.AttributePath.isAttributePath(condition.subject)
+                ? condition.subject
+                : new AttributePath_1.AttributePath(condition.subject);
+            switch (condition.name) {
+                case 'attribute_exists':
+                case 'attribute_not_exists':
+                    return (new FunctionExpression_1.FunctionExpression(condition.name, subject))
+                        .serialize(attributes);
+                case 'attribute_type':
+                case 'begins_with':
+                case 'contains':
+                    return (new FunctionExpression_1.FunctionExpression(condition.name, subject, condition.expected))
+                        .serialize(attributes);
+            }
+        case 'Not':
+            return "NOT (" + serializeConditionExpression(condition.condition, attributes) + ")";
+        case 'And':
+        case 'Or':
+            if (condition.conditions.length === 1) {
+                return serializeConditionExpression(condition.conditions[0], attributes);
+            }
+            return condition.conditions
+                .map(function (cond) { return "(" + serializeConditionExpression(cond, attributes) + ")"; })
+                .join(" " + condition.type.toUpperCase() + " ");
+    }
+}
+exports.serializeConditionExpression = serializeConditionExpression;
+function serializeBinaryComparison(cond, attributes, comparator) {
+    return attributes.addName(cond.subject) + " " + comparator + " " + serializeOperand(cond.object, attributes);
+}
+function serializeOperand(operand, attributes) {
+    if (FunctionExpression_1.FunctionExpression.isFunctionExpression(operand)) {
+        return operand.serialize(attributes);
+    }
+    return AttributePath_1.AttributePath.isAttributePath(operand)
+        ? attributes.addName(operand)
+        : attributes.addValue(operand);
+}
+//# sourceMappingURL=ConditionExpression.js.map
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-expressions/build/ExpressionAttributes.js":
+/*!*********************************************************************!*\
+  !*** ../../@aws/dynamodb-expressions/build/ExpressionAttributes.js ***!
+  \*********************************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var tslib_1 = __webpack_require__(/*! tslib */ "../../tslib/tslib.es6.js");
+var AttributePath_1 = __webpack_require__(/*! ./AttributePath */ "../../@aws/dynamodb-expressions/build/AttributePath.js");
+var AttributeValue_1 = __webpack_require__(/*! ./AttributeValue */ "../../@aws/dynamodb-expressions/build/AttributeValue.js");
+var dynamodb_auto_marshaller_1 = __webpack_require__(/*! @aws/dynamodb-auto-marshaller */ "../../@aws/dynamodb-auto-marshaller/build/index.js");
+/**
+ * An object that manages expression attribute name and value substitution.
+ */
+var ExpressionAttributes = /** @class */ (function () {
+    function ExpressionAttributes() {
+        this.names = {};
+        this.values = {};
+        this.marshaller = new dynamodb_auto_marshaller_1.Marshaller();
+        this.nameMap = {};
+        this._ctr = 0;
+    }
+    /**
+     * Add an attribute path to this substitution context.
+     *
+     * @returns The substitution value to use in the expression. The same
+     * attribute name will always be converted to the same substitution value
+     * when supplied to the same ExpressionAttributes object multiple times.
+     */
+    ExpressionAttributes.prototype.addName = function (path) {
+        var e_1, _a;
+        if (AttributePath_1.AttributePath.isAttributePath(path)) {
+            var escapedPath = '';
+            try {
+                for (var _b = tslib_1.__values(path.elements), _c = _b.next(); !_c.done; _c = _b.next()) {
+                    var element = _c.value;
+                    if (element.type === 'AttributeName') {
+                        escapedPath += "." + this.addAttributeName(element.name);
+                    }
+                    else {
+                        escapedPath += "[" + element.index + "]";
+                    }
+                }
+            }
+            catch (e_1_1) { e_1 = { error: e_1_1 }; }
+            finally {
+                try {
+                    if (_c && !_c.done && (_a = _b.return)) _a.call(_b);
+                }
+                finally { if (e_1) throw e_1.error; }
+            }
+            return escapedPath.substring(1);
+        }
+        return this.addName(new AttributePath_1.AttributePath(path));
+    };
+    /**
+     * Add an attribute value to this substitution context.
+     *
+     * @returns The substitution value to use in the expression.
+     */
+    ExpressionAttributes.prototype.addValue = function (value) {
+        var modeledAttrValue = AttributeValue_1.AttributeValue.isAttributeValue(value)
+            ? value.marshalled
+            : this.marshaller.marshallValue(value);
+        var substitution = ":val" + this._ctr++;
+        this.values[substitution] = modeledAttrValue;
+        return substitution;
+    };
+    ExpressionAttributes.prototype.addAttributeName = function (attributeName) {
+        if (!(attributeName in this.nameMap)) {
+            this.nameMap[attributeName] = "#attr" + this._ctr++;
+            this.names[this.nameMap[attributeName]] = attributeName;
+        }
+        return this.nameMap[attributeName];
+    };
+    return ExpressionAttributes;
+}());
+exports.ExpressionAttributes = ExpressionAttributes;
+//# sourceMappingURL=ExpressionAttributes.js.map
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-expressions/build/FunctionExpression.js":
+/*!*******************************************************************!*\
+  !*** ../../@aws/dynamodb-expressions/build/FunctionExpression.js ***!
+  \*******************************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var AttributePath_1 = __webpack_require__(/*! ./AttributePath */ "../../@aws/dynamodb-expressions/build/AttributePath.js");
+var FUNCTION_EXPRESSION_TAG = 'AmazonDynamoDbFunctionExpression';
+var EXPECTED_TOSTRING = "[object " + FUNCTION_EXPRESSION_TAG + "]";
+/**
+ * An object representing a DynamoDB function expression.
+ */
+var FunctionExpression = /** @class */ (function () {
+    function FunctionExpression(name) {
+        var args = [];
+        for (var _i = 1; _i < arguments.length; _i++) {
+            args[_i - 1] = arguments[_i];
+        }
+        this.name = name;
+        this[Symbol.toStringTag] = FUNCTION_EXPRESSION_TAG;
+        this.args = args;
+    }
+    FunctionExpression.prototype.serialize = function (attributes) {
+        var expressionSafeArgs = this.args.map(function (arg) { return AttributePath_1.AttributePath.isAttributePath(arg)
+            ? attributes.addName(arg)
+            : attributes.addValue(arg); });
+        return this.name + "(" + expressionSafeArgs.join(', ') + ")";
+    };
+    /**
+     * Evaluate whether the provided value is a FunctionExpression object.
+     */
+    FunctionExpression.isFunctionExpression = function (arg) {
+        return arg instanceof FunctionExpression
+            || Object.prototype.toString.call(arg) === EXPECTED_TOSTRING;
+    };
+    return FunctionExpression;
+}());
+exports.FunctionExpression = FunctionExpression;
+//# sourceMappingURL=FunctionExpression.js.map
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-expressions/build/MathematicalExpression.js":
+/*!***********************************************************************!*\
+  !*** ../../@aws/dynamodb-expressions/build/MathematicalExpression.js ***!
+  \***********************************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var AttributePath_1 = __webpack_require__(/*! ./AttributePath */ "../../@aws/dynamodb-expressions/build/AttributePath.js");
+var MATHEMATICAL_EXPRESSION_TAG = 'AmazonDynamoDbMathematicalExpression';
+var EXPECTED_TOSTRING = "[object " + MATHEMATICAL_EXPRESSION_TAG + "]";
+/**
+ * An object representing a DynamoDB function expression.
+ */
+var MathematicalExpression = /** @class */ (function () {
+    function MathematicalExpression(lhs, operator, rhs) {
+        this.lhs = lhs;
+        this.operator = operator;
+        this.rhs = rhs;
+        this[Symbol.toStringTag] = MATHEMATICAL_EXPRESSION_TAG;
+    }
+    MathematicalExpression.prototype.serialize = function (attributes) {
+        var safeArgs = [this.lhs, this.rhs].map(function (arg) { return AttributePath_1.AttributePath.isAttributePath(arg) || typeof arg === 'string'
+            ? attributes.addName(arg)
+            : attributes.addValue(arg); });
+        return safeArgs[0] + " " + this.operator + " " + safeArgs[1];
+    };
+    /**
+     * Evaluate whether the provided value is a MathematicalExpression object.
+     */
+    MathematicalExpression.isMathematicalExpression = function (arg) {
+        return arg instanceof MathematicalExpression
+            || Object.prototype.toString.call(arg) === EXPECTED_TOSTRING;
+    };
+    return MathematicalExpression;
+}());
+exports.MathematicalExpression = MathematicalExpression;
+//# sourceMappingURL=MathematicalExpression.js.map
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-expressions/build/ProjectionExpression.js":
+/*!*********************************************************************!*\
+  !*** ../../@aws/dynamodb-expressions/build/ProjectionExpression.js ***!
+  \*********************************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var tslib_1 = __webpack_require__(/*! tslib */ "../../tslib/tslib.es6.js");
+/**
+ * Convert the supplied projection expression to the string format
+ * expected by DynamoDB, substituting all attribute paths using the
+ * provided ExpressionAttributes object.
+ */
+function serializeProjectionExpression(projection, attributes) {
+    var e_1, _a;
+    var serialized = [];
+    try {
+        for (var projection_1 = tslib_1.__values(projection), projection_1_1 = projection_1.next(); !projection_1_1.done; projection_1_1 = projection_1.next()) {
+            var projected = projection_1_1.value;
+            serialized.push(attributes.addName(projected));
+        }
+    }
+    catch (e_1_1) { e_1 = { error: e_1_1 }; }
+    finally {
+        try {
+            if (projection_1_1 && !projection_1_1.done && (_a = projection_1.return)) _a.call(projection_1);
+        }
+        finally { if (e_1) throw e_1.error; }
+    }
+    return serialized.join(', ');
+}
+exports.serializeProjectionExpression = serializeProjectionExpression;
+//# sourceMappingURL=ProjectionExpression.js.map
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-expressions/build/UpdateExpression.js":
+/*!*****************************************************************!*\
+  !*** ../../@aws/dynamodb-expressions/build/UpdateExpression.js ***!
+  \*****************************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var tslib_1 = __webpack_require__(/*! tslib */ "../../tslib/tslib.es6.js");
+var AttributePath_1 = __webpack_require__(/*! ./AttributePath */ "../../@aws/dynamodb-expressions/build/AttributePath.js");
+var FunctionExpression_1 = __webpack_require__(/*! ./FunctionExpression */ "../../@aws/dynamodb-expressions/build/FunctionExpression.js");
+var MathematicalExpression_1 = __webpack_require__(/*! ./MathematicalExpression */ "../../@aws/dynamodb-expressions/build/MathematicalExpression.js");
+/**
+ * An object representing a DynamoDB update expression.
+ */
+var UpdateExpression = /** @class */ (function () {
+    function UpdateExpression() {
+        this.toAdd = new Map();
+        this.toDelete = new Map();
+        this.toRemove = new Set();
+        this.toSet = new Map();
+    }
+    /**
+     * Add a directive to the expression's `add` clause.
+     */
+    UpdateExpression.prototype.add = function (path, value) {
+        this.toAdd.set(AttributePath_1.AttributePath.isAttributePath(path) ? path : new AttributePath_1.AttributePath(path), value);
+    };
+    /**
+     * Add a directive to the expression's `delete` clause.
+     */
+    UpdateExpression.prototype.delete = function (path, value) {
+        this.toDelete.set(AttributePath_1.AttributePath.isAttributePath(path) ? path : new AttributePath_1.AttributePath(path), value);
+    };
+    /**
+     * Add a directive to the expression's `remove` clause.
+     */
+    UpdateExpression.prototype.remove = function (path) {
+        this.toRemove.add(AttributePath_1.AttributePath.isAttributePath(path) ? path : new AttributePath_1.AttributePath(path));
+    };
+    /**
+     * Add a directive to the expression's `set` clause.
+     */
+    UpdateExpression.prototype.set = function (path, value) {
+        this.toSet.set(AttributePath_1.AttributePath.isAttributePath(path) ? path : new AttributePath_1.AttributePath(path), value);
+    };
+    UpdateExpression.prototype.serialize = function (attributes) {
+        var e_1, _a, e_2, _b, e_3, _c, e_4, _d;
+        var clauses = [];
+        var phrases = [];
+        try {
+            for (var _e = tslib_1.__values([
+                [this.toAdd, 'ADD'],
+                [this.toDelete, 'DELETE'],
+            ]), _f = _e.next(); !_f.done; _f = _e.next()) {
+                var _g = tslib_1.__read(_f.value, 2), mapping = _g[0], verb = _g[1];
+                try {
+                    for (var _h = tslib_1.__values(mapping.entries()), _j = _h.next(); !_j.done; _j = _h.next()) {
+                        var _k = tslib_1.__read(_j.value, 2), key = _k[0], value = _k[1];
+                        phrases.push(attributes.addName(key) + " " + attributes.addValue(value));
+                    }
+                }
+                catch (e_2_1) { e_2 = { error: e_2_1 }; }
+                finally {
+                    try {
+                        if (_j && !_j.done && (_b = _h.return)) _b.call(_h);
+                    }
+                    finally { if (e_2) throw e_2.error; }
+                }
+                if (phrases.length > 0) {
+                    clauses.push(verb + " " + phrases.join(', '));
+                    phrases.length = 0;
+                }
+            }
+        }
+        catch (e_1_1) { e_1 = { error: e_1_1 }; }
+        finally {
+            try {
+                if (_f && !_f.done && (_a = _e.return)) _a.call(_e);
+            }
+            finally { if (e_1) throw e_1.error; }
+        }
+        try {
+            for (var _l = tslib_1.__values(this.toSet.entries()), _m = _l.next(); !_m.done; _m = _l.next()) {
+                var _o = tslib_1.__read(_m.value, 2), key = _o[0], value = _o[1];
+                phrases.push(attributes.addName(key) + " = " + (FunctionExpression_1.FunctionExpression.isFunctionExpression(value) || MathematicalExpression_1.MathematicalExpression.isMathematicalExpression(value)
+                    ? value.serialize(attributes) : attributes.addValue(value)));
+            }
+        }
+        catch (e_3_1) { e_3 = { error: e_3_1 }; }
+        finally {
+            try {
+                if (_m && !_m.done && (_c = _l.return)) _c.call(_l);
+            }
+            finally { if (e_3) throw e_3.error; }
+        }
+        if (phrases.length > 0) {
+            clauses.push("SET " + phrases.join(', '));
+            phrases.length = 0;
+        }
+        try {
+            for (var _p = tslib_1.__values(this.toRemove), _q = _p.next(); !_q.done; _q = _p.next()) {
+                var keyToRemove = _q.value;
+                phrases.push(attributes.addName(keyToRemove));
+            }
+        }
+        catch (e_4_1) { e_4 = { error: e_4_1 }; }
+        finally {
+            try {
+                if (_q && !_q.done && (_d = _p.return)) _d.call(_p);
+            }
+            finally { if (e_4) throw e_4.error; }
+        }
+        if (phrases.length > 0) {
+            clauses.push("REMOVE " + phrases.join(', '));
+            phrases.length = 0;
+        }
+        return clauses.join(' ');
+    };
+    return UpdateExpression;
+}());
+exports.UpdateExpression = UpdateExpression;
+//# sourceMappingURL=UpdateExpression.js.map
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-expressions/build/index.js":
+/*!******************************************************!*\
+  !*** ../../@aws/dynamodb-expressions/build/index.js ***!
+  \******************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var tslib_1 = __webpack_require__(/*! tslib */ "../../tslib/tslib.es6.js");
+tslib_1.__exportStar(__webpack_require__(/*! ./AttributePath */ "../../@aws/dynamodb-expressions/build/AttributePath.js"), exports);
+tslib_1.__exportStar(__webpack_require__(/*! ./AttributeValue */ "../../@aws/dynamodb-expressions/build/AttributeValue.js"), exports);
+tslib_1.__exportStar(__webpack_require__(/*! ./ConditionExpression */ "../../@aws/dynamodb-expressions/build/ConditionExpression.js"), exports);
+tslib_1.__exportStar(__webpack_require__(/*! ./ExpressionAttributes */ "../../@aws/dynamodb-expressions/build/ExpressionAttributes.js"), exports);
+tslib_1.__exportStar(__webpack_require__(/*! ./FunctionExpression */ "../../@aws/dynamodb-expressions/build/FunctionExpression.js"), exports);
+tslib_1.__exportStar(__webpack_require__(/*! ./MathematicalExpression */ "../../@aws/dynamodb-expressions/build/MathematicalExpression.js"), exports);
+tslib_1.__exportStar(__webpack_require__(/*! ./ProjectionExpression */ "../../@aws/dynamodb-expressions/build/ProjectionExpression.js"), exports);
+tslib_1.__exportStar(__webpack_require__(/*! ./UpdateExpression */ "../../@aws/dynamodb-expressions/build/UpdateExpression.js"), exports);
+//# sourceMappingURL=index.js.map
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-query-iterator/build/DynamoDbPaginator.js":
+/*!*********************************************************************!*\
+  !*** ../../@aws/dynamodb-query-iterator/build/DynamoDbPaginator.js ***!
+  \*********************************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var mergeConsumedCapacities_1 = __webpack_require__(/*! ./mergeConsumedCapacities */ "../../@aws/dynamodb-query-iterator/build/mergeConsumedCapacities.js");
+if (Symbol && !Symbol.asyncIterator) {
+    Symbol.asyncIterator = Symbol.for("__@@asyncIterator__");
+}
+var DynamoDbPaginator = /** @class */ (function () {
+    function DynamoDbPaginator(limit) {
+        this.limit = limit;
+        this._count = 0;
+        this._scannedCount = 0;
+        this.lastResolved = Promise.resolve();
+    }
+    /**
+     * @inheritDoc
+     */
+    DynamoDbPaginator.prototype[Symbol.asyncIterator] = function () {
+        return this;
+    };
+    Object.defineProperty(DynamoDbPaginator.prototype, "consumedCapacity", {
+        /**
+         * @inheritDoc
+         */
+        get: function () {
+            return this._consumedCapacity;
+        },
+        enumerable: true,
+        configurable: true
+    });
+    Object.defineProperty(DynamoDbPaginator.prototype, "count", {
+        /**
+         * @inheritDoc
+         */
+        get: function () {
+            return this._count;
+        },
+        enumerable: true,
+        configurable: true
+    });
+    Object.defineProperty(DynamoDbPaginator.prototype, "lastEvaluatedKey", {
+        /**
+         * Get the LastEvaluatedKey of the last result page yielded by this
+         * paginator or undefined if the scan has already been exhausted.
+         */
+        get: function () {
+            return this._lastKey;
+        },
+        enumerable: true,
+        configurable: true
+    });
+    /**
+     * @inheritDoc
+     */
+    DynamoDbPaginator.prototype.next = function () {
+        var _this = this;
+        this.lastResolved = this.lastResolved.then(function () {
+            if (_this.count >= (_this.limit === undefined ? Infinity : _this.limit)) {
+                return { done: true };
+            }
+            return _this.getNext().then(function (_a) {
+                var done = _a.done, value = _a.value;
+                if (value && !done) {
+                    _this._lastKey = value.LastEvaluatedKey;
+                    _this._count += (value.Items || []).length;
+                    _this._scannedCount += (value.ScannedCount || 0);
+                    _this._consumedCapacity = mergeConsumedCapacities_1.mergeConsumedCapacities(_this._consumedCapacity, value.ConsumedCapacity);
+                }
+                return { value: value, done: done };
+            });
+        });
+        return this.lastResolved;
+    };
+    /**
+     * @inheritDoc
+     */
+    DynamoDbPaginator.prototype.return = function () {
+        // Prevent any further use of this iterator
+        this.lastResolved = Promise.reject(new Error('Iteration has been manually interrupted and may not be resumed'));
+        this.lastResolved.catch(function () { });
+        return Promise.resolve({ done: true });
+    };
+    Object.defineProperty(DynamoDbPaginator.prototype, "scannedCount", {
+        /**
+         * @inheritDoc
+         */
+        get: function () {
+            return this._scannedCount;
+        },
+        enumerable: true,
+        configurable: true
+    });
+    DynamoDbPaginator.prototype.getNextPageSize = function (requestedPageSize) {
+        if (this.limit === undefined) {
+            return requestedPageSize;
+        }
+        return Math.min(requestedPageSize === undefined ? Infinity : requestedPageSize, this.limit - this.count);
+    };
+    return DynamoDbPaginator;
+}());
+exports.DynamoDbPaginator = DynamoDbPaginator;
+//# sourceMappingURL=DynamoDbPaginator.js.map
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-query-iterator/build/ItemIterator.js":
+/*!****************************************************************!*\
+  !*** ../../@aws/dynamodb-query-iterator/build/ItemIterator.js ***!
+  \****************************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var tslib_1 = __webpack_require__(/*! tslib */ "../../tslib/tslib.es6.js");
+if (Symbol && !Symbol.asyncIterator) {
+    Symbol.asyncIterator = Symbol.for("__@@asyncIterator__");
+}
+var ItemIterator = /** @class */ (function () {
+    function ItemIterator(paginator) {
+        this.paginator = paginator;
+        this._iteratedCount = 0;
+        this.lastResolved = Promise.resolve();
+        this.pending = [];
+    }
+    /**
+     * @inheritDoc
+     */
+    ItemIterator.prototype[Symbol.asyncIterator] = function () {
+        return this;
+    };
+    Object.defineProperty(ItemIterator.prototype, "consumedCapacity", {
+        /**
+         * The capacity units consumed by the Scan operation. The data returned
+         * includes the total provisioned throughput consumed, along with statistics
+         * for the table and any indexes involved in the operation. ConsumedCapacity
+         * is only returned if the ReturnConsumedCapacity parameter was specified.
+         */
+        get: function () {
+            return this.paginator.consumedCapacity;
+        },
+        enumerable: true,
+        configurable: true
+    });
+    Object.defineProperty(ItemIterator.prototype, "count", {
+        /**
+         * The number of items that have been iterated over.
+         */
+        get: function () {
+            return this._iteratedCount;
+        },
+        enumerable: true,
+        configurable: true
+    });
+    /**
+     * @inheritDoc
+     */
+    ItemIterator.prototype.next = function () {
+        var _this = this;
+        this.lastResolved = this.lastResolved.then(function () { return _this.getNext(); });
+        return this.lastResolved;
+    };
+    /**
+     * Detaches the underlying paginator from this iterator and returns it. The
+     * paginator will yield arrays of unmarshalled items, with each yielded
+     * array corresponding to a single call to the underlying API. As with the
+     * underlying API, pages may contain a variable number of items or no items,
+     * in which case an empty array will be yielded.
+     *
+     * Calling this method will disable further iteration.
+     */
+    ItemIterator.prototype.pages = function () {
+        // Prevent the iterator from being used further and squelch any uncaught
+        // promise rejection warnings
+        this.lastResolved = Promise.reject(new Error('The underlying paginator has been detached from this iterator.'));
+        this.lastResolved.catch(function () { });
+        return this.paginator;
+    };
+    /**
+     * @inheritDoc
+     */
+    ItemIterator.prototype.return = function () {
+        // Prevent any further use of this iterator
+        this.lastResolved = Promise.reject(new Error('Iteration has been manually interrupted and may not be resumed'));
+        this.lastResolved.catch(function () { });
+        // Clear the pending queue to free up memory
+        this.pending.length = 0;
+        return this.paginator.return().then(doneSigil);
+    };
+    Object.defineProperty(ItemIterator.prototype, "scannedCount", {
+        /**
+         * The number of items evaluated, before any ScanFilter is applied. A high
+         * scannedCount value with few, or no, Count results indicates an
+         * inefficient Scan operation. For more information, see Count and
+         * ScannedCount in the Amazon DynamoDB Developer Guide.
+         */
+        get: function () {
+            return this.paginator.scannedCount;
+        },
+        enumerable: true,
+        configurable: true
+    });
+    ItemIterator.prototype.getNext = function () {
+        var _this = this;
+        if (this.pending.length > 0) {
+            this._iteratedCount++;
+            return Promise.resolve({
+                value: this.pending.shift(),
+                done: false
+            });
+        }
+        return this.paginator.next().then(function (_a) {
+            var done = _a.done, value = _a.value;
+            var _b;
+            if (done) {
+                return { done: done };
+            }
+            (_b = _this.pending).push.apply(_b, tslib_1.__spread(value.Items || []));
+            return _this.getNext();
+        });
+    };
+    return ItemIterator;
+}());
+exports.ItemIterator = ItemIterator;
+function doneSigil() {
+    return { done: true };
+}
+//# sourceMappingURL=ItemIterator.js.map
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-query-iterator/build/ParallelScanIterator.js":
+/*!************************************************************************!*\
+  !*** ../../@aws/dynamodb-query-iterator/build/ParallelScanIterator.js ***!
+  \************************************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var tslib_1 = __webpack_require__(/*! tslib */ "../../tslib/tslib.es6.js");
+var ItemIterator_1 = __webpack_require__(/*! ./ItemIterator */ "../../@aws/dynamodb-query-iterator/build/ItemIterator.js");
+var ParallelScanPaginator_1 = __webpack_require__(/*! ./ParallelScanPaginator */ "../../@aws/dynamodb-query-iterator/build/ParallelScanPaginator.js");
+var ParallelScanIterator = /** @class */ (function (_super) {
+    tslib_1.__extends(ParallelScanIterator, _super);
+    function ParallelScanIterator(client, input, scanState) {
+        return _super.call(this, new ParallelScanPaginator_1.ParallelScanPaginator(client, input, scanState)) || this;
+    }
+    return ParallelScanIterator;
+}(ItemIterator_1.ItemIterator));
+exports.ParallelScanIterator = ParallelScanIterator;
+//# sourceMappingURL=ParallelScanIterator.js.map
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-query-iterator/build/ParallelScanPaginator.js":
+/*!*************************************************************************!*\
+  !*** ../../@aws/dynamodb-query-iterator/build/ParallelScanPaginator.js ***!
+  \*************************************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var tslib_1 = __webpack_require__(/*! tslib */ "../../tslib/tslib.es6.js");
+var mergeConsumedCapacities_1 = __webpack_require__(/*! ./mergeConsumedCapacities */ "../../@aws/dynamodb-query-iterator/build/mergeConsumedCapacities.js");
+var ScanPaginator_1 = __webpack_require__(/*! ./ScanPaginator */ "../../@aws/dynamodb-query-iterator/build/ScanPaginator.js");
+if (Symbol && !Symbol.asyncIterator) {
+    Symbol.asyncIterator = Symbol.for("__@@asyncIterator__");
+}
+var ParallelScanPaginator = /** @class */ (function () {
+    function ParallelScanPaginator(client, input, scanState) {
+        if (scanState === void 0) { scanState = nullScanState(input.TotalSegments); }
+        this.pending = [];
+        this.lastResolved = Promise.resolve();
+        var TotalSegments = input.TotalSegments;
+        if (scanState.length !== TotalSegments) {
+            throw new Error("Parallel scan state must have a length equal to the number of "
+                + ("scan segments. Expected an array of " + TotalSegments + " but")
+                + ("received an array with " + scanState.length + " elements."));
+        }
+        this.iterators = new Array(TotalSegments);
+        for (var i = 0; i < TotalSegments; i++) {
+            var iterator = new ScanPaginator_1.ScanPaginator(client, tslib_1.__assign({}, input, { Segment: i, ExclusiveStartKey: scanState[i].LastEvaluatedKey }));
+            this.iterators[i] = iterator;
+            // If the segment has not been initialized or a pagination token has
+            // been received, request the next page.
+            if (!scanState[i].initialized || scanState[i].LastEvaluatedKey) {
+                this.refillPending(iterator, i);
+            }
+        }
+        this._scanState = tslib_1.__spread(scanState);
+    }
+    /**
+     * @inheritDoc
+     */
+    ParallelScanPaginator.prototype[Symbol.asyncIterator] = function () {
+        return this;
+    };
+    Object.defineProperty(ParallelScanPaginator.prototype, "consumedCapacity", {
+        /**
+         * @inheritDoc
+         */
+        get: function () {
+            return this.iterators.reduce(function (merged, paginator) { return mergeConsumedCapacities_1.mergeConsumedCapacities(merged, paginator.consumedCapacity); }, undefined);
+        },
+        enumerable: true,
+        configurable: true
+    });
+    Object.defineProperty(ParallelScanPaginator.prototype, "count", {
+        /**
+         * @inheritDoc
+         */
+        get: function () {
+            return this.iterators.reduce(function (sum, paginator) { return sum + paginator.count; }, 0);
+        },
+        enumerable: true,
+        configurable: true
+    });
+    /**
+     * @inheritDoc
+     */
+    ParallelScanPaginator.prototype.next = function () {
+        var _this = this;
+        this.lastResolved = this.lastResolved.then(function () { return _this.getNext(); });
+        return this.lastResolved;
+    };
+    ParallelScanPaginator.prototype.getNext = function () {
+        return tslib_1.__awaiter(this, void 0, void 0, function () {
+            var _a, iterator, _b, value, done, segment, i;
+            return tslib_1.__generator(this, function (_c) {
+                switch (_c.label) {
+                    case 0:
+                        if (this.pending.length === 0) {
+                            return [2 /*return*/, doneSigil()];
+                        }
+                        return [4 /*yield*/, Promise.race(this.pending.map(function (pending) { return pending.result; }))];
+                    case 1:
+                        _a = _c.sent(), iterator = _a.iterator, _b = _a.result, value = _b.value, done = _b.done, segment = _a.segment;
+                        // Update the scan state for this segment. This will either be the last
+                        // evaluated key (for an unfinished segment) or undefined (for a
+                        // completed segment).
+                        this._scanState[segment] = {
+                            initialized: true,
+                            LastEvaluatedKey: value && value.LastEvaluatedKey,
+                        };
+                        // Remove the result from the pending set.
+                        for (i = this.pending.length - 1; i >= 0; i--) {
+                            if (this.pending[i].iterator === iterator) {
+                                this.pending.splice(i, 1);
+                            }
+                        }
+                        // If the iterator is not finished, add its next result to the pending
+                        // set.
+                        if (!done) {
+                            this.refillPending(iterator, segment);
+                            return [2 /*return*/, { value: value, done: done }];
+                        }
+                        else {
+                            // If a segment has finished but there are still outstanding
+                            // requests, recur. A done sigil will be returned when the pending
+                            // queue is empty.
+                            return [2 /*return*/, this.getNext()];
+                        }
+                        return [2 /*return*/];
+                }
+            });
+        });
+    };
+    /**
+     * @inheritDoc
+     */
+    ParallelScanPaginator.prototype.return = function () {
+        return tslib_1.__awaiter(this, void 0, void 0, function () {
+            return tslib_1.__generator(this, function (_a) {
+                this.pending.length = 0;
+                return [2 /*return*/, Promise.all(this.iterators.map(function (iterator) { return iterator.return(); }))
+                        .then(doneSigil)];
+            });
+        });
+    };
+    Object.defineProperty(ParallelScanPaginator.prototype, "scannedCount", {
+        /**
+         * @inheritDoc
+         */
+        get: function () {
+            return this.iterators.reduce(function (sum, paginator) { return sum + paginator.scannedCount; }, 0);
+        },
+        enumerable: true,
+        configurable: true
+    });
+    Object.defineProperty(ParallelScanPaginator.prototype, "scanState", {
+        /**
+         * A snapshot of the current state of a parallel scan. May be used to resume
+         * a parallel scan with a separate paginator.
+         */
+        get: function () {
+            return tslib_1.__spread(this._scanState);
+        },
+        enumerable: true,
+        configurable: true
+    });
+    ParallelScanPaginator.prototype.refillPending = function (iterator, segment) {
+        // Use .push to reorder segments within the array of pending results.
+        // Promise.race will iterate over the array of pending results until a
+        // resolved promise is found and therefore will naturally favor promises
+        // towards the head of the queue. Removing resolved segments and sending
+        // them to the back of the line will keep this implementation detail
+        // from creating hot and cold scan segments.
+        this.pending.push({
+            iterator: iterator,
+            result: iterator.next()
+                .then(function (result) { return ({ iterator: iterator, result: result, segment: segment }); }),
+        });
+    };
+    return ParallelScanPaginator;
+}());
+exports.ParallelScanPaginator = ParallelScanPaginator;
+function doneSigil() {
+    return { done: true };
+}
+/**
+ * `Array.prototype.fill` is not available in IE, so a loop is used instead
+ */
+function nullScanState(length) {
+    var target = new Array(length);
+    for (var i = 0; i < length; i++) {
+        target[i] = { initialized: false };
+    }
+    return target;
+}
+//# sourceMappingURL=ParallelScanPaginator.js.map
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-query-iterator/build/QueryIterator.js":
+/*!*****************************************************************!*\
+  !*** ../../@aws/dynamodb-query-iterator/build/QueryIterator.js ***!
+  \*****************************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var tslib_1 = __webpack_require__(/*! tslib */ "../../tslib/tslib.es6.js");
+var ItemIterator_1 = __webpack_require__(/*! ./ItemIterator */ "../../@aws/dynamodb-query-iterator/build/ItemIterator.js");
+var QueryPaginator_1 = __webpack_require__(/*! ./QueryPaginator */ "../../@aws/dynamodb-query-iterator/build/QueryPaginator.js");
+var QueryIterator = /** @class */ (function (_super) {
+    tslib_1.__extends(QueryIterator, _super);
+    function QueryIterator(client, input, limit) {
+        return _super.call(this, new QueryPaginator_1.QueryPaginator(client, input, limit)) || this;
+    }
+    return QueryIterator;
+}(ItemIterator_1.ItemIterator));
+exports.QueryIterator = QueryIterator;
+//# sourceMappingURL=QueryIterator.js.map
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-query-iterator/build/QueryPaginator.js":
+/*!******************************************************************!*\
+  !*** ../../@aws/dynamodb-query-iterator/build/QueryPaginator.js ***!
+  \******************************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var tslib_1 = __webpack_require__(/*! tslib */ "../../tslib/tslib.es6.js");
+var DynamoDbPaginator_1 = __webpack_require__(/*! ./DynamoDbPaginator */ "../../@aws/dynamodb-query-iterator/build/DynamoDbPaginator.js");
+var QueryPaginator = /** @class */ (function (_super) {
+    tslib_1.__extends(QueryPaginator, _super);
+    function QueryPaginator(client, input, limit) {
+        var _this = _super.call(this, limit) || this;
+        _this.client = client;
+        _this.nextRequest = tslib_1.__assign({}, input);
+        return _this;
+    }
+    QueryPaginator.prototype.getNext = function () {
+        var _this = this;
+        if (this.nextRequest) {
+            return this.client.query(tslib_1.__assign({}, this.nextRequest, { Limit: this.getNextPageSize(this.nextRequest.Limit) }))
+                .promise()
+                .then(function (output) {
+                if (_this.nextRequest && output.LastEvaluatedKey) {
+                    _this.nextRequest = tslib_1.__assign({}, _this.nextRequest, { ExclusiveStartKey: output.LastEvaluatedKey });
+                }
+                else {
+                    _this.nextRequest = undefined;
+                }
+                return Promise.resolve({
+                    value: output,
+                    done: false
+                });
+            });
+        }
+        return Promise.resolve({ done: true });
+    };
+    return QueryPaginator;
+}(DynamoDbPaginator_1.DynamoDbPaginator));
+exports.QueryPaginator = QueryPaginator;
+//# sourceMappingURL=QueryPaginator.js.map
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-query-iterator/build/ScanIterator.js":
+/*!****************************************************************!*\
+  !*** ../../@aws/dynamodb-query-iterator/build/ScanIterator.js ***!
+  \****************************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var tslib_1 = __webpack_require__(/*! tslib */ "../../tslib/tslib.es6.js");
+var ItemIterator_1 = __webpack_require__(/*! ./ItemIterator */ "../../@aws/dynamodb-query-iterator/build/ItemIterator.js");
+var ScanPaginator_1 = __webpack_require__(/*! ./ScanPaginator */ "../../@aws/dynamodb-query-iterator/build/ScanPaginator.js");
+var ScanIterator = /** @class */ (function (_super) {
+    tslib_1.__extends(ScanIterator, _super);
+    function ScanIterator(client, input, limit) {
+        return _super.call(this, new ScanPaginator_1.ScanPaginator(client, input, limit)) || this;
+    }
+    return ScanIterator;
+}(ItemIterator_1.ItemIterator));
+exports.ScanIterator = ScanIterator;
+//# sourceMappingURL=ScanIterator.js.map
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-query-iterator/build/ScanPaginator.js":
+/*!*****************************************************************!*\
+  !*** ../../@aws/dynamodb-query-iterator/build/ScanPaginator.js ***!
+  \*****************************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var tslib_1 = __webpack_require__(/*! tslib */ "../../tslib/tslib.es6.js");
+var DynamoDbPaginator_1 = __webpack_require__(/*! ./DynamoDbPaginator */ "../../@aws/dynamodb-query-iterator/build/DynamoDbPaginator.js");
+var ScanPaginator = /** @class */ (function (_super) {
+    tslib_1.__extends(ScanPaginator, _super);
+    function ScanPaginator(client, input, limit) {
+        var _this = _super.call(this, limit) || this;
+        _this.client = client;
+        _this.nextRequest = tslib_1.__assign({}, input, { Limit: _this.getNextPageSize(input.Limit) });
+        return _this;
+    }
+    ScanPaginator.prototype.getNext = function () {
+        var _this = this;
+        if (this.nextRequest) {
+            return this.client.scan(tslib_1.__assign({}, this.nextRequest, { Limit: this.getNextPageSize(this.nextRequest.Limit) }))
+                .promise()
+                .then(function (output) {
+                if (_this.nextRequest && output.LastEvaluatedKey) {
+                    _this.nextRequest = tslib_1.__assign({}, _this.nextRequest, { ExclusiveStartKey: output.LastEvaluatedKey });
+                }
+                else {
+                    _this.nextRequest = undefined;
+                }
+                return Promise.resolve({
+                    value: output,
+                    done: false
+                });
+            });
+        }
+        return Promise.resolve({ done: true });
+    };
+    return ScanPaginator;
+}(DynamoDbPaginator_1.DynamoDbPaginator));
+exports.ScanPaginator = ScanPaginator;
+//# sourceMappingURL=ScanPaginator.js.map
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-query-iterator/build/index.js":
+/*!*********************************************************!*\
+  !*** ../../@aws/dynamodb-query-iterator/build/index.js ***!
+  \*********************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var tslib_1 = __webpack_require__(/*! tslib */ "../../tslib/tslib.es6.js");
+tslib_1.__exportStar(__webpack_require__(/*! ./ParallelScanIterator */ "../../@aws/dynamodb-query-iterator/build/ParallelScanIterator.js"), exports);
+tslib_1.__exportStar(__webpack_require__(/*! ./ParallelScanPaginator */ "../../@aws/dynamodb-query-iterator/build/ParallelScanPaginator.js"), exports);
+tslib_1.__exportStar(__webpack_require__(/*! ./QueryIterator */ "../../@aws/dynamodb-query-iterator/build/QueryIterator.js"), exports);
+tslib_1.__exportStar(__webpack_require__(/*! ./QueryPaginator */ "../../@aws/dynamodb-query-iterator/build/QueryPaginator.js"), exports);
+tslib_1.__exportStar(__webpack_require__(/*! ./ScanIterator */ "../../@aws/dynamodb-query-iterator/build/ScanIterator.js"), exports);
+tslib_1.__exportStar(__webpack_require__(/*! ./ScanPaginator */ "../../@aws/dynamodb-query-iterator/build/ScanPaginator.js"), exports);
+//# sourceMappingURL=index.js.map
+
+/***/ }),
+
+/***/ "../../@aws/dynamodb-query-iterator/build/mergeConsumedCapacities.js":
+/*!***************************************************************************!*\
+  !*** ../../@aws/dynamodb-query-iterator/build/mergeConsumedCapacities.js ***!
+  \***************************************************************************/
+/***/ ((__unused_webpack_module, exports, __webpack_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+var tslib_1 = __webpack_require__(/*! tslib */ "../../tslib/tslib.es6.js");
+/**
+ * @internal
+ */
+function mergeConsumedCapacities(a, b) {
+    if (a || b) {
+        a = a || {};
+        b = b || {};
+        if ((a.TableName && b.TableName) && a.TableName !== b.TableName) {
+            throw new Error('Consumed capacity reports may only be merged if they describe the same table');
+        }
+        return {
+            TableName: a.TableName || b.TableName,
+            CapacityUnits: (a.CapacityUnits || 0) + (b.CapacityUnits || 0),
+            Table: mergeCapacities(a.Table, b.Table),
+            LocalSecondaryIndexes: mergeCapacityMaps(a.LocalSecondaryIndexes, b.LocalSecondaryIndexes),
+            GlobalSecondaryIndexes: mergeCapacityMaps(a.GlobalSecondaryIndexes, b.GlobalSecondaryIndexes),
+        };
+    }
+}
+exports.mergeConsumedCapacities = mergeConsumedCapacities;
+function mergeCapacities(a, b) {
+    if (a || b) {
+        return {
+            CapacityUnits: ((a && a.CapacityUnits) || 0) +
+                ((b && b.CapacityUnits) || 0),
+        };
+    }
+}
+function mergeCapacityMaps(a, b) {
+    var e_1, _a, e_2, _b, e_3, _c;
+    if (a || b) {
+        var out = {};
+        a = a || {};
+        b = b || {};
+        var keys = new Set();
+        try {
+            for (var _d = tslib_1.__values([a, b]), _e = _d.next(); !_e.done; _e = _d.next()) {
+                var map = _e.value;
+                try {
+                    for (var _f = tslib_1.__values(Object.keys(map)), _g = _f.next(); !_g.done; _g = _f.next()) {
+                        var indexName = _g.value;
+                        keys.add(indexName);
+                    }
+                }
+                catch (e_2_1) { e_2 = { error: e_2_1 }; }
+                finally {
+                    try {
+                        if (_g && !_g.done && (_b = _f.return)) _b.call(_f);
+                    }
+                    finally { if (e_2) throw e_2.error; }
+                }
+            }
+        }
+        catch (e_1_1) { e_1 = { error: e_1_1 }; }
+        finally {
+            try {
+                if (_e && !_e.done && (_a = _d.return)) _a.call(_d);
+            }
+            finally { if (e_1) throw e_1.error; }
+        }
+        try {
+            for (var keys_1 = tslib_1.__values(keys), keys_1_1 = keys_1.next(); !keys_1_1.done; keys_1_1 = keys_1.next()) {
+                var key = keys_1_1.value;
+                out[key] = mergeCapacities(a[key], b[key]);
+            }
+        }
+        catch (e_3_1) { e_3 = { error: e_3_1 }; }
+        finally {
+            try {
+                if (keys_1_1 && !keys_1_1.done && (_c = keys_1.return)) _c.call(keys_1);
+            }
+            finally { if (e_3) throw e_3.error; }
+        }
+        return out;
+    }
+}
+//# sourceMappingURL=mergeConsumedCapacities.js.map
+
+/***/ }),
+
 /***/ "../../accepts/index.js":
 /*!******************************!*\
   !*** ../../accepts/index.js ***!
@@ -21757,9 +27783,28 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony import */ var express__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! express */ "../../express/index.js");
 /* harmony import */ var express__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__webpack_require__.n(express__WEBPACK_IMPORTED_MODULE_0__);
 /* harmony import */ var _routes_todoRoute__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./routes/todoRoute */ "../../../src/routes/todoRoute.ts");
+/* harmony import */ var _helper_dynamoDBHelper__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ./helper/dynamoDBHelper */ "../../../src/helper/dynamoDBHelper.ts");
 
 
+
+console.log("outside");
+const initializeDynamoDB = () => {
+    console.log("Herererr");
+    let dbConfig = {
+        awsConfig: {
+            region: ""
+        },
+        dynamoDBConfig: {
+            endpoint: ""
+        }
+    };
+    dbConfig.awsConfig.region = process.env.AWS_REGION;
+    dbConfig.dynamoDBConfig.endpoint = (process.env.APP_ENV === "local") ? "http://localhost:8000" : "";
+    console.log("Initialized Dynamo DB :", dbConfig);
+    return _helper_dynamoDBHelper__WEBPACK_IMPORTED_MODULE_2__.DynamoDBHelper.createInstance(dbConfig);
+};
 const app = express__WEBPACK_IMPORTED_MODULE_0___default()();
+initializeDynamoDB();
 app.use((0,express__WEBPACK_IMPORTED_MODULE_0__.json)());
 app.use(_routes_todoRoute__WEBPACK_IMPORTED_MODULE_1__["default"]);
 app.get('/', (_, res) => {
@@ -21795,6 +27840,68 @@ class TodoController {
 
 /***/ }),
 
+/***/ "../../../src/helper/dynamoDBHelper.ts":
+/*!*********************************************!*\
+  !*** ../../../src/helper/dynamoDBHelper.ts ***!
+  \*********************************************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   "DynamoDBHelper": () => (/* binding */ DynamoDBHelper)
+/* harmony export */ });
+/* harmony import */ var aws_sdk__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! aws-sdk */ "aws-sdk");
+/* harmony import */ var aws_sdk__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__webpack_require__.n(aws_sdk__WEBPACK_IMPORTED_MODULE_0__);
+/* harmony import */ var _aws_dynamodb_data_mapper__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! @aws/dynamodb-data-mapper */ "../../@aws/dynamodb-data-mapper/build/index.js");
+/* harmony import */ var _aws_dynamodb_data_mapper__WEBPACK_IMPORTED_MODULE_1___default = /*#__PURE__*/__webpack_require__.n(_aws_dynamodb_data_mapper__WEBPACK_IMPORTED_MODULE_1__);
+
+
+class DynamoDBHelper {
+    constructor(options) {
+        aws_sdk__WEBPACK_IMPORTED_MODULE_0__.config.update(options.awsConfig);
+        let client = (options.dynamoDBConfig.endpoint) ?
+            new aws_sdk__WEBPACK_IMPORTED_MODULE_0__.DynamoDB(options.dynamoDBConfig) : new aws_sdk__WEBPACK_IMPORTED_MODULE_0__.DynamoDB();
+        this.mapper = new _aws_dynamodb_data_mapper__WEBPACK_IMPORTED_MODULE_1__.DataMapper({ client });
+    }
+    static createInstance(options) {
+        DynamoDBHelper.dBHelperInstance = new DynamoDBHelper(options);
+        return DynamoDBHelper.dBHelperInstance;
+    }
+    static getInstance() {
+        if (!DynamoDBHelper.dBHelperInstance) {
+            let dbConfig = {
+                awsConfig: {
+                    region: ""
+                },
+                dynamoDBConfig: {
+                    endpoint: ""
+                }
+            };
+            dbConfig.awsConfig.region = process.env.AWS_REGION;
+            dbConfig.dynamoDBConfig.endpoint = (process.env.APP_ENV === "local") ? "http://localhost:8000" : "";
+            console.log("Initialized Dynamo DB :", dbConfig);
+            return DynamoDBHelper.createInstance(dbConfig);
+        }
+        return DynamoDBHelper.dBHelperInstance;
+    }
+    dbMapper() {
+        return this.mapper;
+    }
+    async getItem(param) {
+        try {
+            const data = await this.mapper.get(param);
+            return data;
+        }
+        catch (error) {
+            throw (error);
+        }
+    }
+}
+
+
+/***/ }),
+
 /***/ "../../../src/routes/todoRoute.ts":
 /*!****************************************!*\
   !*** ../../../src/routes/todoRoute.ts ***!
@@ -21817,6 +27924,261 @@ todoRoutes.get('/todo', (req, res) => {
     todoController.getTodoList(req, res);
 });
 /* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = (todoRoutes);
+
+
+/***/ }),
+
+/***/ "../../tslib/tslib.es6.js":
+/*!********************************!*\
+  !*** ../../tslib/tslib.es6.js ***!
+  \********************************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   "__assign": () => (/* binding */ __assign),
+/* harmony export */   "__asyncDelegator": () => (/* binding */ __asyncDelegator),
+/* harmony export */   "__asyncGenerator": () => (/* binding */ __asyncGenerator),
+/* harmony export */   "__asyncValues": () => (/* binding */ __asyncValues),
+/* harmony export */   "__await": () => (/* binding */ __await),
+/* harmony export */   "__awaiter": () => (/* binding */ __awaiter),
+/* harmony export */   "__classPrivateFieldGet": () => (/* binding */ __classPrivateFieldGet),
+/* harmony export */   "__classPrivateFieldSet": () => (/* binding */ __classPrivateFieldSet),
+/* harmony export */   "__createBinding": () => (/* binding */ __createBinding),
+/* harmony export */   "__decorate": () => (/* binding */ __decorate),
+/* harmony export */   "__exportStar": () => (/* binding */ __exportStar),
+/* harmony export */   "__extends": () => (/* binding */ __extends),
+/* harmony export */   "__generator": () => (/* binding */ __generator),
+/* harmony export */   "__importDefault": () => (/* binding */ __importDefault),
+/* harmony export */   "__importStar": () => (/* binding */ __importStar),
+/* harmony export */   "__makeTemplateObject": () => (/* binding */ __makeTemplateObject),
+/* harmony export */   "__metadata": () => (/* binding */ __metadata),
+/* harmony export */   "__param": () => (/* binding */ __param),
+/* harmony export */   "__read": () => (/* binding */ __read),
+/* harmony export */   "__rest": () => (/* binding */ __rest),
+/* harmony export */   "__spread": () => (/* binding */ __spread),
+/* harmony export */   "__spreadArrays": () => (/* binding */ __spreadArrays),
+/* harmony export */   "__values": () => (/* binding */ __values)
+/* harmony export */ });
+/*! *****************************************************************************
+Copyright (c) Microsoft Corporation.
+
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY
+AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
+OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+PERFORMANCE OF THIS SOFTWARE.
+***************************************************************************** */
+/* global Reflect, Promise */
+
+var extendStatics = function(d, b) {
+    extendStatics = Object.setPrototypeOf ||
+        ({ __proto__: [] } instanceof Array && function (d, b) { d.__proto__ = b; }) ||
+        function (d, b) { for (var p in b) if (b.hasOwnProperty(p)) d[p] = b[p]; };
+    return extendStatics(d, b);
+};
+
+function __extends(d, b) {
+    extendStatics(d, b);
+    function __() { this.constructor = d; }
+    d.prototype = b === null ? Object.create(b) : (__.prototype = b.prototype, new __());
+}
+
+var __assign = function() {
+    __assign = Object.assign || function __assign(t) {
+        for (var s, i = 1, n = arguments.length; i < n; i++) {
+            s = arguments[i];
+            for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p)) t[p] = s[p];
+        }
+        return t;
+    }
+    return __assign.apply(this, arguments);
+}
+
+function __rest(s, e) {
+    var t = {};
+    for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p) && e.indexOf(p) < 0)
+        t[p] = s[p];
+    if (s != null && typeof Object.getOwnPropertySymbols === "function")
+        for (var i = 0, p = Object.getOwnPropertySymbols(s); i < p.length; i++) {
+            if (e.indexOf(p[i]) < 0 && Object.prototype.propertyIsEnumerable.call(s, p[i]))
+                t[p[i]] = s[p[i]];
+        }
+    return t;
+}
+
+function __decorate(decorators, target, key, desc) {
+    var c = arguments.length, r = c < 3 ? target : desc === null ? desc = Object.getOwnPropertyDescriptor(target, key) : desc, d;
+    if (typeof Reflect === "object" && typeof Reflect.decorate === "function") r = Reflect.decorate(decorators, target, key, desc);
+    else for (var i = decorators.length - 1; i >= 0; i--) if (d = decorators[i]) r = (c < 3 ? d(r) : c > 3 ? d(target, key, r) : d(target, key)) || r;
+    return c > 3 && r && Object.defineProperty(target, key, r), r;
+}
+
+function __param(paramIndex, decorator) {
+    return function (target, key) { decorator(target, key, paramIndex); }
+}
+
+function __metadata(metadataKey, metadataValue) {
+    if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(metadataKey, metadataValue);
+}
+
+function __awaiter(thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+}
+
+function __generator(thisArg, body) {
+    var _ = { label: 0, sent: function() { if (t[0] & 1) throw t[1]; return t[1]; }, trys: [], ops: [] }, f, y, t, g;
+    return g = { next: verb(0), "throw": verb(1), "return": verb(2) }, typeof Symbol === "function" && (g[Symbol.iterator] = function() { return this; }), g;
+    function verb(n) { return function (v) { return step([n, v]); }; }
+    function step(op) {
+        if (f) throw new TypeError("Generator is already executing.");
+        while (_) try {
+            if (f = 1, y && (t = op[0] & 2 ? y["return"] : op[0] ? y["throw"] || ((t = y["return"]) && t.call(y), 0) : y.next) && !(t = t.call(y, op[1])).done) return t;
+            if (y = 0, t) op = [op[0] & 2, t.value];
+            switch (op[0]) {
+                case 0: case 1: t = op; break;
+                case 4: _.label++; return { value: op[1], done: false };
+                case 5: _.label++; y = op[1]; op = [0]; continue;
+                case 7: op = _.ops.pop(); _.trys.pop(); continue;
+                default:
+                    if (!(t = _.trys, t = t.length > 0 && t[t.length - 1]) && (op[0] === 6 || op[0] === 2)) { _ = 0; continue; }
+                    if (op[0] === 3 && (!t || (op[1] > t[0] && op[1] < t[3]))) { _.label = op[1]; break; }
+                    if (op[0] === 6 && _.label < t[1]) { _.label = t[1]; t = op; break; }
+                    if (t && _.label < t[2]) { _.label = t[2]; _.ops.push(op); break; }
+                    if (t[2]) _.ops.pop();
+                    _.trys.pop(); continue;
+            }
+            op = body.call(thisArg, _);
+        } catch (e) { op = [6, e]; y = 0; } finally { f = t = 0; }
+        if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
+    }
+}
+
+function __createBinding(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}
+
+function __exportStar(m, exports) {
+    for (var p in m) if (p !== "default" && !exports.hasOwnProperty(p)) exports[p] = m[p];
+}
+
+function __values(o) {
+    var s = typeof Symbol === "function" && Symbol.iterator, m = s && o[s], i = 0;
+    if (m) return m.call(o);
+    if (o && typeof o.length === "number") return {
+        next: function () {
+            if (o && i >= o.length) o = void 0;
+            return { value: o && o[i++], done: !o };
+        }
+    };
+    throw new TypeError(s ? "Object is not iterable." : "Symbol.iterator is not defined.");
+}
+
+function __read(o, n) {
+    var m = typeof Symbol === "function" && o[Symbol.iterator];
+    if (!m) return o;
+    var i = m.call(o), r, ar = [], e;
+    try {
+        while ((n === void 0 || n-- > 0) && !(r = i.next()).done) ar.push(r.value);
+    }
+    catch (error) { e = { error: error }; }
+    finally {
+        try {
+            if (r && !r.done && (m = i["return"])) m.call(i);
+        }
+        finally { if (e) throw e.error; }
+    }
+    return ar;
+}
+
+function __spread() {
+    for (var ar = [], i = 0; i < arguments.length; i++)
+        ar = ar.concat(__read(arguments[i]));
+    return ar;
+}
+
+function __spreadArrays() {
+    for (var s = 0, i = 0, il = arguments.length; i < il; i++) s += arguments[i].length;
+    for (var r = Array(s), k = 0, i = 0; i < il; i++)
+        for (var a = arguments[i], j = 0, jl = a.length; j < jl; j++, k++)
+            r[k] = a[j];
+    return r;
+};
+
+function __await(v) {
+    return this instanceof __await ? (this.v = v, this) : new __await(v);
+}
+
+function __asyncGenerator(thisArg, _arguments, generator) {
+    if (!Symbol.asyncIterator) throw new TypeError("Symbol.asyncIterator is not defined.");
+    var g = generator.apply(thisArg, _arguments || []), i, q = [];
+    return i = {}, verb("next"), verb("throw"), verb("return"), i[Symbol.asyncIterator] = function () { return this; }, i;
+    function verb(n) { if (g[n]) i[n] = function (v) { return new Promise(function (a, b) { q.push([n, v, a, b]) > 1 || resume(n, v); }); }; }
+    function resume(n, v) { try { step(g[n](v)); } catch (e) { settle(q[0][3], e); } }
+    function step(r) { r.value instanceof __await ? Promise.resolve(r.value.v).then(fulfill, reject) : settle(q[0][2], r); }
+    function fulfill(value) { resume("next", value); }
+    function reject(value) { resume("throw", value); }
+    function settle(f, v) { if (f(v), q.shift(), q.length) resume(q[0][0], q[0][1]); }
+}
+
+function __asyncDelegator(o) {
+    var i, p;
+    return i = {}, verb("next"), verb("throw", function (e) { throw e; }), verb("return"), i[Symbol.iterator] = function () { return this; }, i;
+    function verb(n, f) { i[n] = o[n] ? function (v) { return (p = !p) ? { value: __await(o[n](v)), done: n === "return" } : f ? f(v) : v; } : f; }
+}
+
+function __asyncValues(o) {
+    if (!Symbol.asyncIterator) throw new TypeError("Symbol.asyncIterator is not defined.");
+    var m = o[Symbol.asyncIterator], i;
+    return m ? m.call(o) : (o = typeof __values === "function" ? __values(o) : o[Symbol.iterator](), i = {}, verb("next"), verb("throw"), verb("return"), i[Symbol.asyncIterator] = function () { return this; }, i);
+    function verb(n) { i[n] = o[n] && function (v) { return new Promise(function (resolve, reject) { v = o[n](v), settle(resolve, reject, v.done, v.value); }); }; }
+    function settle(resolve, reject, d, v) { Promise.resolve(v).then(function(v) { resolve({ value: v, done: d }); }, reject); }
+}
+
+function __makeTemplateObject(cooked, raw) {
+    if (Object.defineProperty) { Object.defineProperty(cooked, "raw", { value: raw }); } else { cooked.raw = raw; }
+    return cooked;
+};
+
+function __importStar(mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (Object.hasOwnProperty.call(mod, k)) result[k] = mod[k];
+    result.default = mod;
+    return result;
+}
+
+function __importDefault(mod) {
+    return (mod && mod.__esModule) ? mod : { default: mod };
+}
+
+function __classPrivateFieldGet(receiver, privateMap) {
+    if (!privateMap.has(receiver)) {
+        throw new TypeError("attempted to get private field on non-instance");
+    }
+    return privateMap.get(receiver);
+}
+
+function __classPrivateFieldSet(receiver, privateMap, value) {
+    if (!privateMap.has(receiver)) {
+        throw new TypeError("attempted to set private field on non-instance");
+    }
+    privateMap.set(receiver, value);
+    return value;
+}
 
 
 /***/ }),
@@ -22178,6 +28540,49 @@ function unpipe(stream) {
 
 /***/ }),
 
+/***/ "../../utf8-bytes/index.js":
+/*!*********************************!*\
+  !*** ../../utf8-bytes/index.js ***!
+  \*********************************/
+/***/ ((module) => {
+
+module.exports = function (str) {
+    var bytes = [];
+    for (var i = 0; i < str.length; i++) {
+        var c = str.charCodeAt(i);
+        if (c >= 0xd800 && c <= 0xdbff && i + 1 < str.length) {
+            var cn = str.charCodeAt(i + 1);
+            if (cn >= 0xdc00 && cn <= 0xdfff) {
+                var pt = (c - 0xd800) * 0x400 + cn - 0xdc00 + 0x10000;
+                
+                bytes.push(
+                    0xf0 + Math.floor(pt / 64 / 64 / 64),
+                    0x80 + Math.floor(pt / 64 / 64) % 64,
+                    0x80 + Math.floor(pt / 64) % 64,
+                    0x80 + pt % 64
+                );
+                i += 1;
+                continue;
+            }
+        }
+        if (c >= 2048) {
+            bytes.push(
+                0xe0 + Math.floor(c / 64 / 64),
+                0x80 + Math.floor(c / 64) % 64,
+                0x80 + c % 64
+            );
+        }
+        else if (c >= 128) {
+            bytes.push(0xc0 + Math.floor(c / 64), 0x80 + c % 64);
+        }
+        else bytes.push(c);
+    }
+    return bytes;
+};
+
+
+/***/ }),
+
 /***/ "../../utils-merge/index.js":
 /*!**********************************!*\
   !*** ../../utils-merge/index.js ***!
@@ -22368,6 +28773,17 @@ function vary (res, field) {
   }
 }
 
+
+/***/ }),
+
+/***/ "aws-sdk":
+/*!**************************!*\
+  !*** external "aws-sdk" ***!
+  \**************************/
+/***/ ((module) => {
+
+"use strict";
+module.exports = require("aws-sdk");
 
 /***/ }),
 
