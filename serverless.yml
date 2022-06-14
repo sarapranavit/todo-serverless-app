@@ -15,7 +15,15 @@ service: todo-serverless-app
 # app and org for use with dashboard.serverless.com
 #app: your-app-name
 #org: your-org-name
-
+custom:
+ stage: ${opt:stage, 'offline'}
+ region: ${opt:region, 'us-east-1'}
+ bundle:
+    linting: false
+    excludeFiles: "**/*.test.ts"
+ serverless-offline:
+    httpPort: 4000
+    noPrependStageInUrl: true
 # You can pin your service to only deploy with a specific Serverless version
 # Check out our docs for more details
 frameworkVersion: '3'
@@ -60,14 +68,14 @@ provider:
 
 functions:
   hello:
-    handler: handler.hello
+    handler: handler.handler
 #    The following are a few example events you can configure
 #    NOTE: Please make sure to change your handler code to work with those events
 #    Check the event documentation for details
-#    events:
-#      - httpApi:
-#          path: /users/create
-#          method: get
+    events:
+      - httpApi:
+          path: "/{proxy+}"
+          method: "*"
 #      - websocket: $connect
 #      - s3: ${env:BUCKET}
 #      - schedule: rate(10 minutes)
@@ -112,3 +120,7 @@ functions:
 #     NewOutput:
 #       Description: "Description for the output"
 #       Value: "Some output value"
+
+plugins:
+  - serverless-offline
+  - serverless-bundle
