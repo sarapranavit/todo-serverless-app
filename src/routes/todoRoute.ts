@@ -1,11 +1,11 @@
 import express, { Request, Response } from 'express';
+import { TodoController } from "../controller/todoController"
 
 const todoRoutes = express.Router();
+const todoController = new TodoController()
 
 todoRoutes.get('/todo', (req: Request, res:Response) => {
-    res.json({
-        "Msg": "todo- list"
-    })
+    todoController.getTodoList(req, res)
 })
 
 

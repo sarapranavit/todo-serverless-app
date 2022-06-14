@@ -21756,12 +21756,12 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ });
 /* harmony import */ var express__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! express */ "../../express/index.js");
 /* harmony import */ var express__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__webpack_require__.n(express__WEBPACK_IMPORTED_MODULE_0__);
-/* harmony import */ var _routes_route__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./routes/route */ "../../../src/routes/route.ts");
+/* harmony import */ var _routes_todoRoute__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./routes/todoRoute */ "../../../src/routes/todoRoute.ts");
 
 
 const app = express__WEBPACK_IMPORTED_MODULE_0___default()();
 app.use((0,express__WEBPACK_IMPORTED_MODULE_0__.json)());
-app.use(_routes_route__WEBPACK_IMPORTED_MODULE_1__["default"]);
+app.use(_routes_todoRoute__WEBPACK_IMPORTED_MODULE_1__["default"]);
 app.get('/', (_, res) => {
     res.json({
         msg: 'Hello world',
@@ -21772,10 +21772,33 @@ app.get('/', (_, res) => {
 
 /***/ }),
 
-/***/ "../../../src/routes/route.ts":
-/*!************************************!*\
-  !*** ../../../src/routes/route.ts ***!
-  \************************************/
+/***/ "../../../src/controller/todoController.ts":
+/*!*************************************************!*\
+  !*** ../../../src/controller/todoController.ts ***!
+  \*************************************************/
+/***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
+
+"use strict";
+__webpack_require__.r(__webpack_exports__);
+/* harmony export */ __webpack_require__.d(__webpack_exports__, {
+/* harmony export */   "TodoController": () => (/* binding */ TodoController)
+/* harmony export */ });
+class TodoController {
+    async getTodoList(req, res) {
+        console.log("req", req);
+        res.json({
+            "Msg": "todo- list"
+        });
+    }
+}
+
+
+/***/ }),
+
+/***/ "../../../src/routes/todoRoute.ts":
+/*!****************************************!*\
+  !*** ../../../src/routes/todoRoute.ts ***!
+  \****************************************/
 /***/ ((__unused_webpack_module, __webpack_exports__, __webpack_require__) => {
 
 "use strict";
@@ -21785,13 +21808,13 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ });
 /* harmony import */ var express__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! express */ "../../express/index.js");
 /* harmony import */ var express__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__webpack_require__.n(express__WEBPACK_IMPORTED_MODULE_0__);
+/* harmony import */ var _controller_todoController__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ../controller/todoController */ "../../../src/controller/todoController.ts");
+
 
 const todoRoutes = express__WEBPACK_IMPORTED_MODULE_0___default().Router();
+const todoController = new _controller_todoController__WEBPACK_IMPORTED_MODULE_1__.TodoController();
 todoRoutes.get('/todo', (req, res) => {
-    console.log("req", { req });
-    res.json({
-        "Msg": "todo- list"
-    });
+    todoController.getTodoList(req, res);
 });
 /* harmony default export */ const __WEBPACK_DEFAULT_EXPORT__ = (todoRoutes);
 
