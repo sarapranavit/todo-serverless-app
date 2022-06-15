@@ -12,4 +12,12 @@ todoRoutes.get('/todo/:id', (req: Request, res:Response) => {
     todoController.getTodoById(req, res)
 })
 
+todoRoutes.post('/todo', (req: Request, res:Response) => {
+    todoController.createTodo(req, res)
+})
+
+todoRoutes.put('/todo', (req: Request, res:Response) => {
+    todoController.updateTodo(req, res)
+})
+
 export default todoRoutes

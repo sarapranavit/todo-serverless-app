@@ -32,4 +32,25 @@ export class TodoModel {
             throw(error);
         }
     }
+
+    public async createTodo(todoEntity:TodoList) {
+        try {
+            const response = <TodoList>await this.dynhelper.putItem(todoEntity);
+            return response
+        }
+        catch (error) {
+            throw(error);
+        }
+    }
+
+    public async updateTodo(todoEntity:TodoList) {
+        try {
+            const response = <TodoList>await this.dynhelper.putItem(todoEntity);
+            return response
+        }
+        catch (error) {
+            throw(error);
+        }
+    }
+
 }

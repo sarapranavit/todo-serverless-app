@@ -74,5 +74,17 @@ export class DynamoDBHelper {
         }
     }
 
+    public async putItem(param: StringToAnyObjectMap) {
+
+        try {
+            const data = await this.mapper.put(param);
+            return data;
+        } catch (error) {
+            throw(error);
+        } 
+    }
+
+    
+
 
 }
