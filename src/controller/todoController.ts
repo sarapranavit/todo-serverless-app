@@ -14,4 +14,10 @@ export class TodoController {
         const result = await this.todoModel.getTodoList()
         return res.json({result})
     }
+
+    async getTodoById(req: Request, res:Response) {
+        const id = req.params.id;
+        const result = await this.todoModel.getTodoById(id)
+        return res.json(result)
+    }
 }

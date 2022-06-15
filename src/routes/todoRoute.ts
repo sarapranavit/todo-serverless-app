@@ -8,5 +8,8 @@ todoRoutes.get('/todo', (req: Request, res:Response) => {
     todoController.getTodoList(req, res)
 })
 
+todoRoutes.get('/todo/:id', (req: Request, res:Response) => {
+    todoController.getTodoById(req, res)
+})
 
 export default todoRoutes

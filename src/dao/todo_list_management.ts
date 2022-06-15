@@ -1,6 +1,6 @@
 import {
+    attribute,
     hashKey,
-    rangeKey,
     table
 } from '@aws/dynamodb-data-mapper-annotations';
 
@@ -11,6 +11,6 @@ export class TodoList{
     @hashKey()
     id: string
 
-    @rangeKey()
+    @attribute()
     name: string
 }
