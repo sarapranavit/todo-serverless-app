@@ -1,5 +1,6 @@
 import * as AWS from 'aws-sdk';
 import { DataMapper, StringToAnyObjectMap } from '@aws/dynamodb-data-mapper';
+import { ConditionExpression } from '@aws/dynamodb-expressions';
 import { IDBHelperConfig } from './types'
 import { TodoList } from 'src/dao/todo_list_management';
 
@@ -61,7 +62,13 @@ export class DynamoDBHelper {
 
     public async scanItem() {
         try {
-            const data = await this.mapper.scan(TodoList)
+
+            const statusFilter: ConditionExpression = {
+                type: 'Equals',
+                subject: 'status',
+                object: 'Active'
+            };
+            const data = this.mapper.scan(TodoList, { filter: statusFilter })
             let result = []
             for await (const record of data) {
                 console.log(record, data.count, data.scannedCount);
@@ -75,13 +82,25 @@ export class DynamoDBHelper {
     }
 
     public async putItem(param: StringToAnyObjectMap) {
-
         try {
             const data = await this.mapper.put(param);
             return data;
         } catch (error) {
             throw(error);
         } 
+    }
+
+    public async queryItem(param: StringToAnyObjectMap, filterConditon?: ConditionExpression ) {
+
+        let resultSet:TodoList[] = [];
+        
+        const query = await this.mapper.query(TodoList, param, {filter: filterConditon} );
+
+        for await(const item of query) {
+            resultSet.push(Object.assign(new TodoList, item))
+        }
+
+        return resultSet;
     }
 
     

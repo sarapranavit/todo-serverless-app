@@ -20,4 +20,9 @@ todoRoutes.put('/todo', (req: Request, res:Response) => {
     todoController.updateTodo(req, res)
 })
 
+todoRoutes.delete('/todo/:id', (req: Request, res:Response) => {
+    todoController.deleteTodo(req, res)
+})
+
+
 export default todoRoutes

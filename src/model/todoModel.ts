@@ -1,5 +1,6 @@
 import { DynamoDBHelper } from "../helper/dynamoDBHelper";
 import { TodoList } from "../dao/todo_list_management"
+import { ConditionExpression } from "@aws/dynamodb-expressions";
 
 export class TodoModel {
     private dynhelper: DynamoDBHelper = undefined;
@@ -52,5 +53,21 @@ export class TodoModel {
             throw(error);
         }
     }
+
+    public async queryTodo(param) {
+        try {
+            const statusFilter: ConditionExpression = {
+                type: 'Equals',
+                subject: 'status',
+                object: 'Active'
+            };
+            const response = await this.dynhelper.queryItem(param, statusFilter);
+            return response
+        }
+        catch (error) {
+            throw(error);
+        }
+    }
+
 
 }

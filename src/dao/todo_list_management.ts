@@ -13,4 +13,7 @@ export class TodoList{
 
     @attribute()
     name: string
+
+    @attribute()
+    status: string
 }

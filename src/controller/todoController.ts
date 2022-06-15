@@ -40,4 +40,25 @@ export class TodoController {
         const result = await this.todoModel.updateTodo(todoEntity)
         return res.json(result)
     }
+
+    async deleteTodo(req: Request, res:Response) {
+        const id = req.params.id
+        
+        const param = {
+            id: id
+        }
+        const getResult = await this.todoModel.queryTodo(param);
+        let respone = {}
+        if(getResult.length > 0 ) {
+            const todoEntity:TodoList = new TodoList();
+            todoEntity.id = id;
+            todoEntity.status = "InActive";
+            await this.todoModel.updateTodo(todoEntity)
+        }
+        else {
+            respone = { "statuCode": 404, "message": "No Records"}
+        }
+        
+        return res.json(respone)
+    }
 }
