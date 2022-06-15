@@ -32,7 +32,7 @@ custom:
       domain:
         sources:
           - table: ${env:Todo_Dynamo_TABLE}
-            sources: [./db_offline_seed/da_master.json]
+            sources: [./db_offline_seed/todo_list_management.json]
 
 # You can pin your service to only deploy with a specific Serverless version
 # Check out our docs for more details

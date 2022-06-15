@@ -1,6 +1,7 @@
 import * as AWS from 'aws-sdk';
 import { DataMapper, StringToAnyObjectMap } from '@aws/dynamodb-data-mapper';
 import { IDBHelperConfig } from './types'
+import { TodoList } from 'src/dao/todo_list_management';
 
 export class DynamoDBHelper {
     private static dBHelperInstance: DynamoDBHelper;
@@ -33,8 +34,8 @@ export class DynamoDBHelper {
                 }
             };
 
-            dbConfig.awsConfig.region = process.env.AWS_REGION;
-            dbConfig.dynamoDBConfig.endpoint = (process.env.APP_ENV === "local" ) ? "http://localhost:8000" : "";
+            dbConfig.awsConfig.region = "us-east-1";
+            dbConfig.dynamoDBConfig.endpoint = "http://localhost:8000";
             console.log("Initialized Dynamo DB :", dbConfig);
             return DynamoDBHelper.createInstance(dbConfig);
         }
@@ -58,10 +59,16 @@ export class DynamoDBHelper {
         }
     }
 
-    public async scanItem(todo) {
+    public async scanItem() {
         try {
-            const data = await this.mapper.scan(todo)
-            return data;
+            const data = await this.mapper.scan(TodoList)
+            let result = []
+            for await (const record of data) {
+                console.log(record, data.count, data.scannedCount);
+                result.push(record)
+            }
+            return result;
+            
         } catch (error) {
             throw(error);
         }
