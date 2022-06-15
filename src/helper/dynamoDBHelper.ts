@@ -58,5 +58,14 @@ export class DynamoDBHelper {
         }
     }
 
+    public async scanItem(todo) {
+        try {
+            const data = await this.mapper.scan(todo)
+            return data;
+        } catch (error) {
+            throw(error);
+        }
+    }
+
 
 }
