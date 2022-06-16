@@ -6,7 +6,7 @@ import {
 
 @table(process.env.Table)
 export class TodoList{
-    
+   
     @hashKey()
     id: string
 
