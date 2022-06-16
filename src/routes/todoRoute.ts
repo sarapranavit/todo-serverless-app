@@ -10,7 +10,7 @@ todoRoutes.get('/todo', (req: Request, res:Response) => {
     todoController.getTodoList(req, res)
 })
 
-todoRoutes.get('/todo/:id', (req: Request, res:Response) => {
+todoRoutes.get('/todo/:id', middyValidator("todoIdSchema"),(req: Request, res:Response) => {
     todoController.getTodoById(req, res)
 })
 
@@ -22,7 +22,7 @@ todoRoutes.put('/todo/:id', middyValidator("updateTodoSchema"), (req: Request, r
     todoController.updateTodo(req, res)
 })
 
-todoRoutes.delete('/todo/:id', (req: Request, res:Response) => {
+todoRoutes.delete('/todo/:id', middyValidator("todoIdSchema"), (req: Request, res:Response) => {
     todoController.deleteTodo(req, res)
 })
 

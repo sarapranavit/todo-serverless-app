@@ -13,61 +13,93 @@ export class TodoController {
         this.todoModel = new TodoModel()
     }
 
-    async getTodoList(req: Request, res:Response) {
-        console.log("req", req)
-        const result = await this.todoModel.getTodoList()
-        return res.json({result})
+    async getTodoList(_: Request, res:Response) {
+        try {
+            const result = await this.todoModel.getTodoList()
+            return res.json({result})
+        }
+        catch(err) {
+            throw err
+        }
+       
     }
 
     async getTodoById(req: Request, res:Response) {
-        const id = req.params.id;
-        const result = await this.todoModel.getTodoById(id)
-        return res.json(result)
+        try {
+            const id = req.params.id;
+            const result = await this.todoModel.getTodoById(id)
+            if(result){
+                return res.status(200).json(result)
+            }
+            else {
+                return res.status(404).json({statusCode: 404, message: "Todo Not found"})
+            }
+            
+        }
+        catch(err) {
+            throw err
+        }
+       
     }
 
     async createTodo(req: Request, res:Response) {
-        const { body: params } = req
-        const todoEntity = this.constructCreateTodoEntity(params)
-        const result = await this.todoModel.createTodo(todoEntity)
-        return res.json(result)
+        try {
+            const { body: params } = req
+            const todoEntity = this.constructCreateTodoEntity(params)
+            const result = await this.todoModel.createTodo(todoEntity)
+            return res.status(201).json(result)
+        }
+        catch(err) {
+            throw err
+        }
+        
     }
 
     async updateTodo(req: Request, res:Response) {
-        const { body: params } = req
-        const id = req.params.id
-        const param = {
-            id: id
+        try {
+            const { body: params } = req
+            const id = req.params.id
+            const param = {
+                id: id
+            }
+            const getResult:TodoList = await this.todoModel.queryTodo(param);
+            if(getResult) {
+                const todoEntity = this.constructUpdateTodoEntity(params, getResult)
+                const respone =  await this.todoModel.updateTodo(todoEntity)
+
+                return res.status(200).json(respone)
+            }
+            else {
+                return res.status(404).json({statusCode: 404, message: "Todo Id Not Exits"})
+            }
         }
-        const getResult:TodoList = await this.todoModel.queryTodo(param);
-        let respone = {}
-        if(getResult) {
-            const todoEntity = this.constructUpdateTodoEntity(params, getResult)
-            respone =  await this.todoModel.updateTodo(todoEntity)
+        catch(err) {
+            throw err
         }
-        else {
-            respone = { "statuCode": 404, "message": "No Records"}
-        }
-        return res.json(respone)
+        
     }
 
     async deleteTodo(req: Request, res:Response) {
-        const id = req.params.id
-        const param = {
-            id: id
+        try {
+            const id = req.params.id
+            const param = {
+                id: id
+            }
+            const getResult = await this.todoModel.queryTodo(param);
+            if(getResult) {
+                const todoEntity:TodoList = new TodoList();
+                todoEntity.id = id;
+                todoEntity.status = TODO_STATUS.IN_ACTIVE
+                await this.todoModel.updateTodo(todoEntity)
+                return res.status(204).json({})
+            }
+            else {
+                return res.status(404).json({statusCode: 404, message: "Todo Id Not Exits"})
+            }
         }
-        const getResult = await this.todoModel.queryTodo(param);
-        let respone = {}
-        if(getResult) {
-            const todoEntity:TodoList = new TodoList();
-            todoEntity.id = id;
-            todoEntity.status = TODO_STATUS.IN_ACTIVE
-            await this.todoModel.updateTodo(todoEntity)
+        catch(err) {
+            throw err
         }
-        else {
-            respone = { "statuCode": 404, "message": "No Records"}
-        }
-        
-        return res.json(respone)
     }
 
     private constructUpdateTodoEntity(params, getResult) {

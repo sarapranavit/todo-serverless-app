@@ -31,7 +31,10 @@ export class TodoModel {
             return response
         }
         catch (error) {
-            throw(error);
+            if (error && error.itemSought) {
+                return undefined;
+            }
+            throw(error)
         }
     }
 
