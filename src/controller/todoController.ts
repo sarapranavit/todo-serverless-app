@@ -13,6 +13,7 @@ export class TodoController {
     }
 
     async getTodoList(req: Request, res:Response) {
+        console.log("req", req)
         const result = await this.todoModel.getTodoList()
         return res.json({result})
     }

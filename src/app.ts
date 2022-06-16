@@ -14,7 +14,7 @@ const initializeDynamoDB = () => {
         }
     };
 
-    dbConfig.awsConfig.region = process.env.AWS_REGION;
+    dbConfig.awsConfig.region = process.env.REGION;
     dbConfig.dynamoDBConfig.endpoint = (process.env.APP_ENV === "local" ) ? "http://localhost:8000" : "";
     console.log("Initialized Dynamo DB :", dbConfig);
     return DynamoDBHelper.createInstance(dbConfig);

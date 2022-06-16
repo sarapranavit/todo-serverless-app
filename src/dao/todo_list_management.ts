@@ -4,8 +4,7 @@ import {
     table
 } from '@aws/dynamodb-data-mapper-annotations';
 
-
-@table("todo_list_management")
+@table(process.env.Table)
 export class TodoList{
     
     @hashKey()

@@ -42,12 +42,17 @@ useDotenv: true
 provider:
   name: aws
   stage:  ${opt:stage, 'local'}
+  region: ${opt:region, 'us-east-1'}
   runtime: nodejs14.x
+  role: ${env:role_Arn}
+  deploymentBucket: ${env:DEPLOYMENT_BUCKET}
   environment:
     APP_ENV: ${self:provider.stage}
+    Table: ${env:Todo_Dynamo_TABLE}
+    REGION: ${self:provider.region}
 
 functions:
-  hello:
+  todoApi:
     handler: handler.handler
 #    The following are a few example events you can configure
 #    NOTE: Please make sure to change your handler code to work with those events
@@ -61,17 +66,3 @@ plugins:
   - serverless-offline
   - serverless-bundle
   - serverless-dynamodb-local
-
-resources:
-  Resources:
-    UsersTable:
-      Type: AWS::DynamoDB::Table
-      Properties:
-        AttributeDefinitions:
-          - AttributeName: id
-            AttributeType: S
-        KeySchema:
-          - AttributeName: id
-            KeyType: HASH
-        BillingMode: PAY_PER_REQUEST
-        TableName: ${env:Todo_Dynamo_TABLE}

@@ -35,8 +35,8 @@ export class DynamoDBHelper {
                 }
             };
 
-            dbConfig.awsConfig.region = "us-east-1";
-            dbConfig.dynamoDBConfig.endpoint = "http://localhost:8000";
+            dbConfig.awsConfig.region = process.env.REGION
+            dbConfig.dynamoDBConfig.endpoint = (process.env.APP_ENV === "local") ? "http://localhost:8000" : "";
             console.log("Initialized Dynamo DB :", dbConfig);
             return DynamoDBHelper.createInstance(dbConfig);
         }
