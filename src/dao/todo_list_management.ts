@@ -15,4 +15,16 @@ export class TodoList{
 
     @attribute()
     status: string
+    
+    @attribute()
+    descrption: string
+
+    @attribute()
+    dueDate: Date
+
+    @attribute()
+    createdAt: Date
+
+    @attribute()
+    updatedAt: Date
 }

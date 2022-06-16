@@ -34,10 +34,13 @@ export class TodoController {
     }
 
     async updateTodo(req: Request, res:Response) {
-        const { id, name } = req.body
+        const { name } = req.body
+        console.log(req.params)
+        const id = req.params.id
         const todoEntity:TodoList = new TodoList();
         todoEntity.id = id;
         todoEntity.name = name;
+        console.log("todoEntity", todoEntity)
         const result = await this.todoModel.updateTodo(todoEntity)
         return res.json(result)
     }
