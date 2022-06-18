@@ -2,21 +2,26 @@ import {Request, Response } from "express"
 import { v4 as uuidv4 } from 'uuid';
 import { TodoModel } from "../model/todoModel";
 import { TodoList } from "../dao/todo_list_management"
-import { TODO_STATUS } from "src/config";
+import { TODO_STATUS } from "../config";
 
 
 export class TodoController {
 
     private todoModel: TodoModel
 
-    constructor() {
-        this.todoModel = new TodoModel()
+    constructor(todoModel: TodoModel) {
+        this.todoModel = todoModel
     }
 
     async getTodoList(_: Request, res:Response) {
         try {
             const result = await this.todoModel.getTodoList()
-            return res.json({result})
+            if(result.length > 0){
+                return res.status(200).json({todoLists: result})
+            }
+            else {
+                return res.status(404).json({statusCode: 404, message: "Todo List Not found"})
+            }
         }
         catch(err) {
             throw err
@@ -32,7 +37,7 @@ export class TodoController {
                 return res.status(200).json(result)
             }
             else {
-                return res.status(404).json({statusCode: 404, message: "Todo Not found"})
+                return res.status(404).json({statusCode: 404, message: "Todo Id Not Exits"})
             }
             
         }
@@ -87,9 +92,7 @@ export class TodoController {
             }
             const getResult = await this.todoModel.queryTodo(param);
             if(getResult) {
-                const todoEntity:TodoList = new TodoList();
-                todoEntity.id = id;
-                todoEntity.status = TODO_STATUS.IN_ACTIVE
+                const todoEntity = this.contructDeleteTodoEntity(getResult)
                 await this.todoModel.updateTodo(todoEntity)
                 return res.status(204).json({})
             }
@@ -128,5 +131,19 @@ export class TodoController {
         todoEntity.updatedAt = new Date();
 
         return todoEntity;
+    }
+
+    private contructDeleteTodoEntity(getResult) {
+
+        const todoEntity:TodoList = new TodoList();
+        todoEntity.id = getResult.id;
+        todoEntity.name = getResult.name
+        todoEntity.createdAt =  getResult.createdAt
+        todoEntity.descrption = getResult.descrption
+        todoEntity.dueDate = getResult.dueDate
+        todoEntity.updatedAt = new Date()
+        todoEntity.status = TODO_STATUS.IN_ACTIVE
+
+        return todoEntity
     }
 }

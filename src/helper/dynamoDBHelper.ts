@@ -2,7 +2,8 @@ import * as AWS from 'aws-sdk';
 import { DataMapper, StringToAnyObjectMap } from '@aws/dynamodb-data-mapper';
 import { ConditionExpression } from '@aws/dynamodb-expressions';
 import { IDBHelperConfig } from './types'
-import { TodoList } from 'src/dao/todo_list_management';
+import { TODO_STATUS } from '../config';
+import { TodoList } from '../dao/todo_list_management';
 
 export class DynamoDBHelper {
     private static dBHelperInstance: DynamoDBHelper;
@@ -66,7 +67,7 @@ export class DynamoDBHelper {
             const statusFilter: ConditionExpression = {
                 type: 'Equals',
                 subject: 'status',
-                object: 'Active'
+                object: TODO_STATUS.ACTIVE
             };
             const data = this.mapper.scan(TodoList, { filter: statusFilter })
             let result = []

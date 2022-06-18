@@ -20,7 +20,7 @@ const initializeDynamoDB = () => {
     return DynamoDBHelper.createInstance(dbConfig);
 };
 
-const app = express();
+ const app = express();
 initializeDynamoDB();
 app.use(json());
 app.use(todoRoutes)
@@ -31,8 +31,5 @@ app.get('/', (_, res) => {
         msg: 'Hello world',
     })
 })
-
-
-
 
 export { app }

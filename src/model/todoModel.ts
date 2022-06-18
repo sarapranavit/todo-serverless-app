@@ -1,7 +1,7 @@
 import { ConditionExpression } from "@aws/dynamodb-expressions";
 import { DynamoDBHelper } from "../helper/dynamoDBHelper";
 import { TodoList } from "../dao/todo_list_management"
-import { TODO_STATUS } from "src/config";
+import { TODO_STATUS } from "../config";
 
 export class TodoModel {
     private dynhelper: DynamoDBHelper = undefined;
@@ -13,8 +13,6 @@ export class TodoModel {
 
     public async getTodoList() {
         try {
-            //todoList.id = "ORG#104970";
-            //todoList.name = "todo-task-1";
             const response = await this.dynhelper.scanItem()
             return response
         }

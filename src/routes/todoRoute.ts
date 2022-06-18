@@ -2,9 +2,11 @@ import express, { Request, Response } from 'express';
 import { TodoController } from "../controller/todoController"
 //const Validator = require("../middleware/request_validator")
 import { middyValidator } from "../middleware/request_validator"
+import { TodoModel } from "../model/todoModel";
 
+const toModel = new TodoModel()
 const todoRoutes = express.Router();
-const todoController = new TodoController()
+const todoController = new TodoController(toModel)
 
 todoRoutes.get('/todo', (req: Request, res:Response) => {
     todoController.getTodoList(req, res)
